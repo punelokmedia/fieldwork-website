@@ -18,7 +18,7 @@ const AIPosterGenerator = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL;
+  const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
   const presets = [
     { name: 'Futuristic', icon: Rocket, prompt: 'Futuristic anti-gravity technology scene, premium tech gadget levitating in mid air, soft shadow below, energy particles and light streaks, dark gradient studio background, neon rim lighting, cinematic contrast, ultra realistic, sharp focus, professional product photography, modern advertisement poster layout, 4k.' },

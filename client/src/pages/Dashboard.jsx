@@ -308,7 +308,7 @@ const Dashboard = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [visibleCount, setVisibleCount] = useState(3);
 
-  const API_URL = import.meta.env.VITE_API_URL;
+  const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
   const isAdmin = user?.role === 'admin';
 
   const fetchReports = async () => {
