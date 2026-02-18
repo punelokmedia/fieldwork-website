@@ -517,7 +517,8 @@ const Dashboard = () => {
       }, 500);
     } catch (err) {
       console.error(err);
-      alert('Error saving report');
+      alert('Error saving report: ' + (err.response?.data?.msg || err.message));
+      setIsUploading(false);
     }
   };
   const resetForm = () => {
@@ -1023,7 +1024,7 @@ const Dashboard = () => {
 
           {/* Scrollable Form Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form id="report-form" onSubmit={handleSubmit} className="space-y-6">
               {/* Report Title */}
               <div>
                 <label className="block text-xs font-black text-slate-900 uppercase tracking-widest mb-2">
@@ -1290,7 +1291,7 @@ const Dashboard = () => {
           </div>
 
           {/* Footer Actions */}
-          <div className="flex justify-end pt-4 bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl border-t border-gray-100">
+          <div className="flex justify-end pt-4 bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl border-t border-gray-100 relative z-20">
             <button
               type="button"
               onClick={() => setShowForm(false)}
@@ -1300,20 +1301,36 @@ const Dashboard = () => {
             </button>
             <button
               type="submit"
+              form="report-form"
               disabled={isUploading}
               className="inline-flex justify-center py-2.5 px-8 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:grayscale"
             >
               {isUploading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>Uploading {Math.round(uploadProgress)}%</span>
+                  <span>Uploading...</span>
                 </div>
               ) : (
                 editingReportId ? 'Update Report' : 'Submit Report'
               )}
             </button>
           </div>
-        </div>
+
+          {/* Full Screen Loading Overlay */}
+          {isUploading && (
+            <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200">
+              <div className="w-16 h-16 border-4 border-red-100 border-t-red-600 rounded-full animate-spin mb-4 shadow-xl"></div>
+              <h3 className="text-xl font-black text-gray-800 animate-pulse">Publishing Report</h3>
+              <p className="text-sm text-gray-500 font-medium mt-2">Please wait while we process your media...</p>
+              <div className="mt-6 w-64 h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                <div
+                  className="h-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-300 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-2 font-mono">{Math.round(uploadProgress)}% Complete</p>
+            </div>
+          )}        </div>
       </div>
       {/* Media Editor Modal */}
       {
