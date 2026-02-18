@@ -35,7 +35,7 @@ const UserManagement = ({ token }) => {
       setUsers(res.data);
     } catch (err) {
       console.error("Failed to fetch users", err);
-      setError('Failed to fetch users');
+      setError(err.response?.data?.msg || err.message || 'Failed to fetch users');
     } finally {
       setLoading(false);
     }
@@ -65,7 +65,7 @@ const UserManagement = ({ token }) => {
       return;
     }
 
-   
+
     try {
       if (isEditing) {
         // Update User
@@ -104,7 +104,7 @@ const UserManagement = ({ token }) => {
     }
   };
 
-  
+
   const handleEditClick = (user) => {
     setIsEditing(true);
     setEditingUserId(user._id);

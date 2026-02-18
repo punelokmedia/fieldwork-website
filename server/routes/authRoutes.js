@@ -138,6 +138,9 @@ router.get('/', auth, async (req, res) => {
 router.get('/users', auth, async (req, res) => {
     try {
         const requestUser = await User.findById(req.user.id);
+        if (!requestUser) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
         if (requestUser.role !== 'admin') {
             return res.status(401).json({ msg: 'Not authorized as admin' });
         }
@@ -172,6 +175,9 @@ router.post(
     try {
       // Check if user is admin
       const requestUser = await User.findById(req.user.id);
+      if (!requestUser) {
+        return res.status(404).json({ msg: 'User not found' });
+      }
       if (requestUser.role !== 'admin') {
         return res.status(401).json({ msg: 'Not authorized as admin' });
       }
@@ -229,6 +235,9 @@ router.get('/stats', auth, async (req, res) => {
 router.delete('/users/:id', auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
+        if (!user) {
+             return res.status(404).json({ msg: 'User not found' });
+        }
         if (user.role !== 'admin') {
             return res.status(401).json({ msg: 'Not authorized as admin' });
         }
@@ -255,6 +264,9 @@ router.delete('/users/:id', auth, async (req, res) => {
 router.put('/users/:id', auth, async (req, res) => {
     try {
         const adminUser = await User.findById(req.user.id);
+        if (!adminUser) {
+             return res.status(404).json({ msg: 'User not found' });
+        }
         if (adminUser.role !== 'admin') {
             return res.status(401).json({ msg: 'Not authorized as admin' });
         }

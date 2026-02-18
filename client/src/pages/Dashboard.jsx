@@ -860,7 +860,7 @@ const Dashboard = () => {
                           </div>
 
                           {/* Card Footer Actions - Plain */}
-                          <div className="py-4 px-5 border-t border-gray-50 flex items-center justify-between">
+                          <div className="py-4 px-5 border-t border-gray-50 flex flex-wrap items-center justify-between gap-y-3">
                             <div className="flex items-center gap-1">
                               <span className={`w-2 h-2 rounded-full ${report.status === 'published' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -1291,11 +1291,11 @@ const Dashboard = () => {
           </div>
 
           {/* Footer Actions */}
-          <div className="flex justify-end pt-4 bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl border-t border-gray-100 relative z-20">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end bg-gray-50 px-6 py-4 border-t border-gray-100 z-20">
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="mr-3 px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+              className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors w-full sm:w-auto"
             >
               Cancel
             </button>
@@ -1303,7 +1303,7 @@ const Dashboard = () => {
               type="submit"
               form="report-form"
               disabled={isUploading}
-              className="inline-flex justify-center py-2.5 px-8 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:grayscale"
+              className="inline-flex justify-center items-center py-2.5 px-8 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:grayscale w-full sm:w-auto"
             >
               {isUploading ? (
                 <div className="flex items-center gap-2">
