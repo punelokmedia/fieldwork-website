@@ -55,7 +55,7 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
           const canvasEl = document.createElement('canvas');
           containerRef.current.appendChild(canvasEl);
 
-          const fabricLib = fabric.default || fabric;
+          const fabricLib = fabric;
 
           if (fabricCanvasRef.current) {
             fabricCanvasRef.current.dispose();
@@ -160,7 +160,7 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
   // Apply Filters
   useEffect(() => {
     if (fabricCanvasRef.current) {
-      const fabricLib = fabric.default || fabric;
+      const fabricLib = fabric;
       const canvas = fabricCanvasRef.current;
       const objects = canvas.getObjects();
       // Assume the first object is always the background image
@@ -258,7 +258,7 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
 
   const addText = () => {
     if (fabricCanvasRef.current) {
-      const fabricLib = fabric.default || fabric;
+      const fabricLib = fabric;
       const canvas = fabricCanvasRef.current;
 
       // Responsive Initial Width & Font Size
@@ -299,13 +299,13 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
   // --- Logo Handling ---
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
-    
+
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = async (f) => {
       try {
-        const fabricLib = fabric.default || fabric;
+        const fabricLib = fabric;
         // Create an HTML Image element first for reliability
         const imgElement = document.createElement('img');
         imgElement.src = f.target.result;
