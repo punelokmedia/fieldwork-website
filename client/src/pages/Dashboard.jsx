@@ -764,7 +764,7 @@ const Dashboard = () => {
                         <article key={report._id} className="bg-white border-b border-gray-100 flex flex-col h-full">
 
                           {/* Plain Header */}
-                          <div className="py-4 flex items-center justify-between border-b border-gray-50">
+                          <div className="py-4 px-5 flex items-center justify-between border-b border-gray-50">
                             <div className="flex items-center gap-3">
                               <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-red-500/20">
                                 {report.reporterId?.name?.[0]?.toUpperCase() || "R"}
@@ -823,7 +823,7 @@ const Dashboard = () => {
                           </div>
 
                           {/* Content Section - Plain */}
-                          <div className="py-6 flex-1 flex flex-col">
+                          <div className="py-6 px-5 flex-1 flex flex-col">
 
                             {/* Caption Section */}
                             {report.media?.[0]?.caption && (
@@ -859,7 +859,7 @@ const Dashboard = () => {
                           </div>
 
                           {/* Card Footer Actions - Plain */}
-                          <div className="py-4 border-t border-gray-50 flex items-center justify-between">
+                          <div className="py-4 px-5 border-t border-gray-50 flex items-center justify-between">
                             <div className="flex items-center gap-1">
                               <span className={`w-2 h-2 rounded-full ${report.status === 'published' ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`} />
                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">

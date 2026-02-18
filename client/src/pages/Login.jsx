@@ -132,11 +132,11 @@ const Login = () => {
 
   const handleLoginSelect = (type) => {
     if (type === 'admin') {
-      setEmail('admin@example.com');
-      setPassword('admin123');
+      setEmail(import.meta.env.VITE_DEMO_ADMIN_EMAIL || 'admin@example.com');
+      setPassword(import.meta.env.VITE_DEMO_ADMIN_PASSWORD || 'admin123');
     } else {
-      setEmail('field@example.com');
-      setPassword('field123');
+      setEmail(import.meta.env.VITE_DEMO_REPORTER_EMAIL || 'field@example.com');
+      setPassword(import.meta.env.VITE_DEMO_REPORTER_PASSWORD || 'field123');
     }
   };
 
@@ -285,13 +285,21 @@ const Login = () => {
             <div className="mt-8 pt-8 border-t border-gray-100">
               <p className="text-xs text-center text-gray-500 mb-4 uppercase tracking-wider font-semibold">Demo Accounts</p>
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600 cursor-pointer hover:bg-red-50 hover:border-red-100 transition-all hover:shadow-sm" onClick={() => { setEmail('admin@example.com'); setPassword('admin123') }}>
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600 cursor-pointer hover:bg-red-50 hover:border-red-100 transition-all hover:shadow-sm"
+                  onClick={() => {
+                    setEmail(import.meta.env.VITE_DEMO_ADMIN_EMAIL || 'admin@example.com');
+                    setPassword(import.meta.env.VITE_DEMO_ADMIN_PASSWORD || 'admin123');
+                  }}>
                   <span className="font-bold block text-gray-900 mb-1">Admin</span>
-                  admin@example.com
+                  {import.meta.env.VITE_DEMO_ADMIN_EMAIL || 'admin@example.com'}
                 </div>
-                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600 cursor-pointer hover:bg-red-50 hover:border-red-100 transition-all hover:shadow-sm" onClick={() => { setEmail('field@example.com'); setPassword('field123') }}>
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600 cursor-pointer hover:bg-red-50 hover:border-red-100 transition-all hover:shadow-sm"
+                  onClick={() => {
+                    setEmail(import.meta.env.VITE_DEMO_REPORTER_EMAIL || 'field@example.com');
+                    setPassword(import.meta.env.VITE_DEMO_REPORTER_PASSWORD || 'field123');
+                  }}>
                   <span className="font-bold block text-gray-900 mb-1">Reporter</span>
-                  field@example.com
+                  {import.meta.env.VITE_DEMO_REPORTER_EMAIL || 'field@example.com'}
                 </div>
               </div>
             </div>

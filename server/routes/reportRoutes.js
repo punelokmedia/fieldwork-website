@@ -240,6 +240,25 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(401).json({ msg: 'User not authorized' });
     }
 
+    // Delete media from Cloudinary
+    if (report.media && report.media.length > 0) {
+        try {
+            const deletePromises = report.media.map(file => {
+                if (file.publicId) {
+                    // Default to 'image' if type is missing or not video/raw
+                    const resourceType = file.type === 'video' ? 'video' : 'image';
+                    return cloudinary.uploader.destroy(file.publicId, { resource_type: resourceType });
+                }
+                return Promise.resolve();
+            });
+            await Promise.all(deletePromises);
+            console.log(`Deleted ${report.media.length} media files from Cloudinary for report ${report._id}`);
+        } catch (mediaErr) {
+            console.error("Error deleting media from Cloudinary:", mediaErr);
+            // Continue to delete from DB even if Cloudinary delete fails
+        }
+    }
+
     await Report.findByIdAndDelete(req.params.id);
 
     res.json({ msg: 'Report removed' });
