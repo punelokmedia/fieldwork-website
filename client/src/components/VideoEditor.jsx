@@ -525,6 +525,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
   };
 
   return (
+
+
     <div className="flex flex-col md:flex-row h-full w-full bg-gray-900 text-white min-h-0 font-sans">
       {/* Main Preview Area - 45% height on mobile, flex-1 on desktop */}
       <div className="w-full md:flex-1 h-[45%] md:h-full bg-black relative flex flex-col items-center justify-center overflow-hidden order-1 md:order-2 min-h-0 p-4">
@@ -677,6 +679,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             )
           })}
         </div>
+
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8 min-h-0">
