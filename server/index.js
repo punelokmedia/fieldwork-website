@@ -11,6 +11,10 @@ connectDB();
 // Init Middleware
 app.use(express.json());
 app.use(cors());
+app.use((req, res, next) => {
+  res.header('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
 
 // Validate Social Media Tokens
 const validateTokens = require('./utils/tokenValidator');
