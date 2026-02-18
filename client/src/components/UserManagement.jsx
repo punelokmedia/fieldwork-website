@@ -35,6 +35,12 @@ const UserManagement = ({ token }) => {
       setUsers(res.data);
     } catch (err) {
       console.error("Failed to fetch users", err);
+      if (err.response?.status === 401) {
+        alert('Session expired or invalid. Please login again.');
+        localStorage.removeItem('token');
+        window.location.reload();
+        return;
+      }
       setError(err.response?.data?.msg || err.message || 'Failed to fetch users');
     } finally {
       setLoading(false);

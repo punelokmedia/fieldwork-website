@@ -139,7 +139,7 @@ router.get('/users', auth, async (req, res) => {
     try {
         const requestUser = await User.findById(req.user.id);
         if (!requestUser) {
-            return res.status(404).json({ msg: 'User not found' });
+            return res.status(401).json({ msg: 'User not found' });
         }
         if (requestUser.role !== 'admin') {
             return res.status(401).json({ msg: 'Not authorized as admin' });
