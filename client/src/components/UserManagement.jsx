@@ -154,9 +154,10 @@ const UserManagement = ({ token }) => {
         <button
           type="button"
           onClick={() => { resetForm(); setShowCreateForm(true); }}
-          className="flex items-center justify-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+          disabled={loading}
+          className="flex items-center justify-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          <Plus className="mr-2 h-5 w-5" />
+          {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> : <Plus className="mr-2 h-5 w-5" />}
           Add User
         </button>
       </div>
@@ -514,9 +515,16 @@ const UserManagement = ({ token }) => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 h-12 flex items-center justify-center px-4 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:filter disabled:grayscale disabled:cursor-not-allowed"
                 >
-                  {loading ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update User' : 'Create User')}
+                  {loading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>{isEditing ? 'Updating...' : 'Creating...'}</span>
+                    </div>
+                  ) : (
+                    <span>{isEditing ? 'Update User' : 'Create User'}</span>
+                  )}
                 </button>
               </div>
             </form>
