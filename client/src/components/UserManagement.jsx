@@ -20,7 +20,7 @@ const UserManagement = ({ token }) => {
   // Delete State
   const [userToDelete, setUserToDelete] = useState(null);
 
-  const API_URL = import.meta.env.VITE_API_URL;
+  const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
   useEffect(() => {
     fetchUsers();
