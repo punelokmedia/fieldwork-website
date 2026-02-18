@@ -1078,7 +1078,7 @@ const Dashboard = () => {
                         <input
                           type="file"
                           id="video-upload"
-                          className="hidden"
+                          className="sr-only"
                           onChange={handleVideoChange}
                           accept="video/*"
                         />
@@ -1147,7 +1147,7 @@ const Dashboard = () => {
                         <input
                           type="file"
                           id="image-upload"
-                          className="hidden"
+                          className="sr-only"
                           onChange={handleImageChange}
                           accept="image/*"
                         />
