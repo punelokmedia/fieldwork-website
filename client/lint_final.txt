@@ -1,0 +1,160 @@
+
+> client@0.0.0 lint
+> eslint .
+
+
+C:\Users\gafru\Desktop\filed-work-website\client\publicffmpeg\ffmpeg-core.js
+   8:3954    error  'setWindowTitle' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u          no-unused-vars
+   8:4001    error  Empty block statement                                                                                   no-empty
+   8:4192    error  'arguments_' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u              no-unused-vars
+   8:5268    error  'runtimeInitialized' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u      no-unused-vars
+   8:6359    error  'id' is defined but never used                                                                          no-unused-vars
+   8:6498    error  'id' is defined but never used                                                                          no-unused-vars
+   8:8891    error  'module' is defined but never used                                                                      no-unused-vars
+   8:13269   error  'uncaughtExceptionCount' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+   8:13613   error  'handle' is defined but never used                                                                      no-unused-vars
+   8:13620   error  'symbol' is defined but never used                                                                      no-unused-vars
+   8:13766   error  Unnecessary escape character: \/                                                                        no-useless-escape
+   8:13779   error  Unnecessary escape character: \/                                                                        no-useless-escape
+   8:13790   error  Unnecessary escape character: \/                                                                        no-useless-escape
+   8:15095   error  'randomFill' is a function                                                                              no-func-assign
+   8:16191   error  'i' is already defined                                                                                  no-redeclare
+   8:18002   error  'pos' is defined but never used                                                                         no-unused-vars
+   8:18183   error  'e' is defined but never used                                                                           no-unused-vars
+   8:18466   error  'pos' is defined but never used                                                                         no-unused-vars
+   8:18631   error  'e' is defined but never used                                                                           no-unused-vars
+   8:18968   error  'readline' is not defined                                                                               no-undef
+   8:19978   error  'mount' is defined but never used                                                                       no-unused-vars
+   8:23385   error  'parent' is defined but never used                                                                      no-unused-vars
+   8:23392   error  'name' is defined but never used                                                                        no-unused-vars
+   8:23645   error  'e' is defined but never used                                                                           no-unused-vars
+   8:23647   error  Empty block statement                                                                                   no-empty
+   8:23670   error  'i' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                       no-unused-vars
+   8:24095   error  'i' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                       no-unused-vars
+   8:24295   error  Do not access Object.prototype method 'hasOwnProperty' from target object                               no-prototype-builtins
+   8:26876   error  'mmapFlags' is defined but never used                                                                   no-unused-vars
+   8:27235   error  'event' is defined but never used                                                                       no-unused-vars
+   8:27493   error  'Browser' is not defined                                                                                no-undef
+   8:28897   error  'FileReaderSync' is not defined                                                                         no-undef
+   8:30796   error  'parent' is defined but never used                                                                      no-unused-vars
+   8:30803   error  'name' is defined but never used                                                                        no-unused-vars
+   8:30853   error  'parent' is defined but never used                                                                      no-unused-vars
+   8:30860   error  'name' is defined but never used                                                                        no-unused-vars
+   8:30865   error  'mode' is defined but never used                                                                        no-unused-vars
+   8:30870   error  'dev' is defined but never used                                                                         no-unused-vars
+   8:30920   error  'oldNode' is defined but never used                                                                     no-unused-vars
+   8:30928   error  'newDir' is defined but never used                                                                      no-unused-vars
+   8:30935   error  'newName' is defined but never used                                                                     no-unused-vars
+   8:30989   error  'parent' is defined but never used                                                                      no-unused-vars
+   8:30996   error  'name' is defined but never used                                                                        no-unused-vars
+   8:31046   error  'parent' is defined but never used                                                                      no-unused-vars
+   8:31053   error  'name' is defined but never used                                                                        no-unused-vars
+   8:31182   error  Do not access Object.prototype method 'hasOwnProperty' from target object                               no-prototype-builtins
+   8:31263   error  'parent' is defined but never used                                                                      no-unused-vars
+   8:31270   error  'newName' is defined but never used                                                                     no-unused-vars
+   8:31278   error  'oldPath' is defined but never used                                                                     no-unused-vars
+   8:31603   error  'stream' is defined but never used                                                                      no-unused-vars
+   8:31610   error  'buffer' is defined but never used                                                                      no-unused-vars
+   8:31617   error  'offset' is defined but never used                                                                      no-unused-vars
+   8:31624   error  'length' is defined but never used                                                                      no-unused-vars
+   8:31631   error  'position' is defined but never used                                                                    no-unused-vars
+   8:35202   error  'node' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                    no-unused-vars
+   8:35247   error  'e' is defined but never used                                                                           no-unused-vars
+   8:35249   error  Empty block statement                                                                                   no-empty
+   8:41180   error  'e' is defined but never used                                                                           no-unused-vars
+   8:41182   error  Empty block statement                                                                                   no-empty
+   8:41816   error  Unnecessary catch clause                                                                                no-useless-catch
+   8:45460   error  'e' is defined but never used                                                                           no-unused-vars
+   8:45462   error  Empty block statement                                                                                   no-empty
+   8:46416   error  Unnecessary catch clause                                                                                no-useless-catch
+   8:48988   error  'stream' is defined but never used                                                                      no-unused-vars
+   8:50596   error  'pos' is defined but never used                                                                         no-unused-vars
+   8:51958   error  'stdin' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                   no-unused-vars
+   8:51992   error  'stdout' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                  no-unused-vars
+   8:52028   error  'stderr' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                  no-unused-vars
+   8:53352   error  'e' is defined but never used                                                                           no-unused-vars
+   8:53354   error  Empty block statement                                                                                   no-empty
+   8:53493   error  'lookup' is already defined                                                                             no-redeclare
+   8:53876   error  'canRead' is defined but never used                                                                     no-unused-vars
+   8:53884   error  'canWrite' is defined but never used                                                                    no-unused-vars
+   8:54112   error  'e' is defined but never used                                                                           no-unused-vars
+   8:54114   error  Empty block statement                                                                                   no-empty
+   8:55202   error  'stream' is defined but never used                                                                      no-unused-vars
+   8:55306   error  'pos' is defined but never used                                                                         no-unused-vars
+   8:55391   error  'e' is defined but never used                                                                           no-unused-vars
+   8:55666   error  'pos' is defined but never used                                                                         no-unused-vars
+   8:55734   error  'e' is defined but never used                                                                           no-unused-vars
+   8:56303   error  'e' is defined but never used                                                                           no-unused-vars
+   8:59232   error  'properties' is already defined                                                                         no-redeclare
+   8:60028   error  'i' is already defined                                                                                  no-redeclare
+   8:60277   error  'prot' is defined but never used                                                                        no-unused-vars
+   8:60282   error  'flags' is defined but never used                                                                       no-unused-vars
+   8:62179   error  'timeout' is defined but never used                                                                     no-unused-vars
+   8:63852   error  'mount' is defined but never used                                                                       no-unused-vars
+   8:65201   error  'position' is defined but never used                                                                    no-unused-vars
+   8:65397   error  'position' is defined but never used                                                                    no-unused-vars
+   8:66908   error  'e' is defined but never used                                                                           no-unused-vars
+   8:67800   error  'e' is defined but never used                                                                           no-unused-vars
+   8:68823   error  'error' is defined but never used                                                                       no-unused-vars
+   8:69175   error  'error' is defined but never used                                                                       no-unused-vars
+   8:70078   error  'e' is defined but never used                                                                           no-unused-vars
+   8:70080   error  Empty block statement                                                                                   no-empty
+   8:70225   error  'e' is defined but never used                                                                           no-unused-vars
+   8:70227   error  Empty block statement                                                                                   no-empty
+   8:71109   error  'sock' is defined but never used                                                                        no-unused-vars
+   8:71114   error  'backlog' is defined but never used                                                                     no-unused-vars
+   8:72611   error  'e' is defined but never used                                                                           no-unused-vars
+   8:76117   error  'flags' is defined but never used                                                                       no-unused-vars
+   8:76123   error  'd1' is defined but never used                                                                          no-unused-vars
+   8:76126   error  'd2' is defined but never used                                                                          no-unused-vars
+   8:76215   error  'errno' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                   no-unused-vars
+   8:78112   error  'd1' is defined but never used                                                                          no-unused-vars
+   8:78115   error  'd2' is defined but never used                                                                          no-unused-vars
+   8:78118   error  'd3' is defined but never used                                                                          no-unused-vars
+   8:78378   error  'd1' is defined but never used                                                                          no-unused-vars
+   8:78381   error  'd2' is defined but never used                                                                          no-unused-vars
+   8:78384   error  'd3' is defined but never used                                                                          no-unused-vars
+   8:78650   error  'flags' is defined but never used                                                                       no-unused-vars
+   8:79369   error  'arg' is already defined                                                                                no-redeclare
+   8:79427   error  'arg' is already defined                                                                                no-redeclare
+   8:81001   error  'd1' is defined but never used                                                                          no-unused-vars
+   8:81004   error  'd2' is defined but never used                                                                          no-unused-vars
+   8:81007   error  'd3' is defined but never used                                                                          no-unused-vars
+   8:81074   error  'errno' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                   no-unused-vars
+   8:81301   error  'd1' is defined but never used                                                                          no-unused-vars
+   8:81304   error  'd2' is defined but never used                                                                          no-unused-vars
+   8:81307   error  'd3' is defined but never used                                                                          no-unused-vars
+   8:81348   error  'errno' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                   no-unused-vars
+   8:81600   error  'd1' is defined but never used                                                                          no-unused-vars
+   8:82267   error  'argp' is already defined                                                                               no-redeclare
+   8:83910   error  'timeout' is defined but never used                                                                     no-unused-vars
+   8:84506   error  'errno' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                   no-unused-vars
+   8:90913   error  'handle' is defined but never used                                                                      no-unused-vars
+   8:91057   error  Expected a conditional expression and instead saw an assignment                                         no-cond-assign
+   8:91875   error  'e' is defined but never used                                                                           no-unused-vars
+   8:91877   error  Empty block statement                                                                                   no-empty
+   8:92926   error  'x' is already defined                                                                                  no-redeclare
+   8:93798   error  'implicit' is defined but never used                                                                    no-unused-vars
+   8:98386   error  'numBytesWrittenExclNull' is already defined                                                            no-redeclare
+   8:98610   error  Empty block statement                                                                                   no-empty
+   8:104268  error  'rule' is already defined                                                                               no-redeclare
+   8:106785  error  'asm' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                     no-unused-vars
+  17:3       error  'module' is not defined                                                                                 no-undef
+  18:42      error  'define' is not defined                                                                                 no-undef
+  19:3       error  'define' is not defined                                                                                 no-undef
+  21:3       error  'exports' is not defined                                                                                no-undef
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\components\ImageEditor.jsx
+  96:24  warning  The ref value 'containerRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'containerRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\components\UserManagement.jsx
+  27:6  warning  React Hook useEffect has a missing dependency: 'fetchUsers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\components\VideoEditor.jsx
+  133:6  warning  React Hook useEffect has a missing dependency: 'handleDuration'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\pages\Dashboard.jsx
+  16:41  error  'Icon' is defined but never used  no-unused-vars
+
+✖ 143 problems (140 errors, 3 warnings)
+

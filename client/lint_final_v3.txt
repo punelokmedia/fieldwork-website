@@ -1,0 +1,16 @@
+
+> client@0.0.0 lint
+> eslint .
+
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\components\ImageEditor.jsx
+  96:24  warning  The ref value 'containerRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'containerRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\components\UserManagement.jsx
+  27:6  warning  React Hook useEffect has a missing dependency: 'fetchUsers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\gafru\Desktop\filed-work-website\client\src\components\VideoEditor.jsx
+  133:6  warning  React Hook useEffect has a missing dependency: 'handleDuration'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+✖ 3 problems (0 errors, 3 warnings)
+
