@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useToast } from '../context/ToastContext';
 import { User, Plus, Trash2, Mail, Shield, X, Check, Pencil, Eye, AlertTriangle } from 'lucide-react';
 
 const UserManagement = ({ token }) => {
+  const toast = useToast();
   const [users, setUsers] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'field_work' });
@@ -86,6 +88,7 @@ const UserManagement = ({ token }) => {
           }
         );
         setSuccess('User updated successfully!');
+        toast.success('User updated successfully');
         setUsers(users.map(u => u._id === editingUserId ? res.data : u));
       } else {
         // Create User
@@ -100,6 +103,7 @@ const UserManagement = ({ token }) => {
           }
         );
         setSuccess('User created successfully!');
+        toast.success('Added successfully');
         setUsers([res.data.user, ...users]);
       }
 
@@ -136,6 +140,7 @@ const UserManagement = ({ token }) => {
       });
       setUsers(users.filter(u => u._id !== userToDelete._id));
       setSuccess('User deleted successfully');
+      toast.success('User deleted successfully');
       setUserToDelete(null);
     } catch (err) {
       console.error(err);

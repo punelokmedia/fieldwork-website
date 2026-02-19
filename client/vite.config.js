@@ -1,13 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
+// Tailwind runs via PostCSS (postcss.config.js) to avoid Vite plugin normalizeUrl issues on Windows
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(),
   ],
+  css: {
+    devSourcemap: false,
+  },
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
   },

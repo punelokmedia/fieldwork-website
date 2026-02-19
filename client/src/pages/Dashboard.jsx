@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from 'react';
 import AuthContext from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import axios from 'axios';
 import {
   Plus, LogOut, MapPin, Image as ImageIcon, Video,
@@ -310,6 +311,7 @@ const Dashboard = () => {
 
   const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
   const isAdmin = user?.role === 'admin';
+  const toast = useToast();
 
   const fetchReports = async () => {
     try {
@@ -508,6 +510,7 @@ const Dashboard = () => {
       }
 
       setUploadProgress(100);
+      toast.success(editingReportId ? 'Report updated successfully' : 'Uploaded successfully');
       setTimeout(() => {
         setIsUploading(false);
         setUploadProgress(0);
@@ -1323,17 +1326,16 @@ const Dashboard = () => {
 
           {/* Full Screen Loading Overlay */}
           {isUploading && (
-            <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in duration-200">
-              <div className="w-16 h-16 border-4 border-red-100 border-t-red-600 rounded-full animate-spin mb-4 shadow-xl"></div>
-              <h3 className="text-xl font-black text-gray-800 animate-pulse">Publishing Report</h3>
-              <p className="text-sm text-gray-500 font-medium mt-2">Please wait while we process your media...</p>
-              <div className="mt-6 w-64 h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+            <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
+              <div className="w-14 h-14 border-2 border-gray-200 border-t-red-600 rounded-full animate-spin mb-4" />
+              <p className="text-sm text-gray-600 font-medium">Uploading…</p>
+              <div className="mt-4 w-48 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-300 ease-out"
+                  className="h-full bg-red-500 transition-all duration-300 ease-out"
                   style={{ width: `${uploadProgress}%` }}
-                ></div>
+                />
               </div>
-              <p className="text-xs text-gray-400 mt-2 font-mono">{Math.round(uploadProgress)}% Complete</p>
+              <p className="text-xs text-gray-400 mt-2">{Math.round(uploadProgress)}%</p>
             </div>
           )}        </div>
       </div>

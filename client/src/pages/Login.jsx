@@ -1,7 +1,8 @@
 import { useState, useContext } from 'react';
 import AuthContext from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, Loader2, ArrowRight, Github, Twitter, Linkedin, Menu, X } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { Lock, Mail, ArrowRight, Github, Twitter, Linkedin, Menu, X } from 'lucide-react';
 
 const PublicNavbar = ({ onSelectLogin }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -131,6 +132,7 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login } = useContext(AuthContext);
+  const toast = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -152,6 +154,7 @@ const Login = () => {
     const success = await login(email, password);
     setLoading(false);
     if (success) {
+      toast.success('Login successful');
       navigate('/dashboard');
     } else {
       setError('Invalid email or password');
@@ -279,9 +282,8 @@ const Login = () => {
                   className="w-full h-12 flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-red-500/20 text-sm font-bold text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-70 disabled:grayscale transition-all transform hover:-translate-y-0.5"
                 >
                   {loading ? (
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                      <span>Verifying...</span>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     </div>
                   ) : (
                     <span className="flex items-center gap-2">Sign in <ArrowRight className="h-4 w-4" /></span>
