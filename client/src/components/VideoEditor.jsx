@@ -312,6 +312,19 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
     };
   }, []);
 
+  // Skip excluded segments when they're excluded or when playback enters them
+  useEffect(() => {
+    if (!duration || excludedSegments.size === 0) return;
+    const seg = getSegmentAtTime(played);
+    if (seg && isSegmentExcluded(seg.start, seg.end)) {
+      const nextTime = getNextIncludedTime(played);
+      if (nextTime < duration && playerRef.current) {
+        playerRef.current.currentTime = nextTime;
+        setPlayed(nextTime);
+      }
+    }
+  }, [excludedSegments, played, duration, splitPoints]);
+
   // Drag Logic
   const handleDragStart = (e, target) => {
     e.preventDefault();
@@ -426,17 +439,48 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         throw new Error("Failed to write input video to memory: " + writeErr.message);
       }
 
+      // If user excluded some segments in Split, export only included segments (concat them first)
+      const allSegs = getSegments();
+      const includedSegs = allSegs.filter(seg => !excludedSegments.has(segmentKey(seg.start, seg.end)));
+      const useSplitExport = excludedSegments.size > 0 && includedSegs.length > 0;
+      let videoInputFile = 'input.mp4';
+      let applyTrim = true;
+
+      if (excludedSegments.size > 0 && includedSegs.length === 0) {
+        alert('No segments included. Add back at least one segment or remove split points, then export.');
+        setProcessing(false);
+        return;
+      }
+
+      if (useSplitExport) {
+        setProgress(5);
+        for (let i = 0; i < includedSegs.length; i++) {
+          const { start, end } = includedSegs[i];
+          const segName = `split_seg_${i}.mp4`;
+          const ret = await ffmpeg.exec(['-ss', String(start), '-to', String(end), '-i', 'input.mp4', '-c', 'copy', segName]);
+          if (ret !== 0) throw new Error(`Split segment ${i + 1} failed.`);
+          setProgress(5 + Math.round(((i + 1) / includedSegs.length) * 15));
+        }
+        const listContent = includedSegs.map((_, i) => `file 'split_seg_${i}.mp4'`).join('\n');
+        await ffmpeg.writeFile('split_list.txt', listContent);
+        const ret = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'split_list.txt', '-c', 'copy', 'input_trimmed.mp4']);
+        if (ret !== 0) throw new Error('Concat of split segments failed.');
+        videoInputFile = 'input_trimmed.mp4';
+        applyTrim = false; // trimmed video is already the "keep" part
+        setProgress(22);
+      }
+
       // Let's reconstruct the command with complex filters more robustly
       const cmd = [];
       let filterComplex = [];
       let lastVideoStream = '0:v'; // Start with the main video input stream
       let currentInputIndex = 1; // For additional inputs (logo, audio)
 
-      // Input seeking for trim (fast)
-      if (trimStart > 0) cmd.push('-ss', trimStart.toString());
-      if (trimEnd > 0 && trimEnd > trimStart) cmd.push('-to', trimEnd.toString());
+      // Input seeking for trim (fast) — only when not using split-export
+      if (applyTrim && trimStart > 0) cmd.push('-ss', trimStart.toString());
+      if (applyTrim && trimEnd > 0 && trimEnd > trimStart) cmd.push('-to', trimEnd.toString());
 
-      cmd.push('-i', 'input.mp4');
+      cmd.push('-i', videoInputFile);
 
       // Add Logo Input
       let logoWritten = false;
@@ -573,9 +617,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       // Reset CMD inputs to be clean
       cmd.length = 0;
       // Seek/Trim options must be before input 0
-      if (trimStart > 0) cmd.push('-ss', trimStart.toString());
-      if (trimEnd > 0 && trimEnd > trimStart) cmd.push('-to', trimEnd.toString());
-      cmd.push('-i', 'input.mp4'); // 0
+      if (applyTrim && trimStart > 0) cmd.push('-ss', trimStart.toString());
+      if (applyTrim && trimEnd > 0 && trimEnd > trimStart) cmd.push('-to', trimEnd.toString());
+      cmd.push('-i', videoInputFile); // 0
 
       if (logoWritten) {
         cmd.push('-i', 'logo.png');
@@ -701,7 +745,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       });
 
       ffmpeg.on('progress', ({ progress }) => {
-        setProgress(hasClips ? Math.round(progress * 30) : Math.round(progress * 100)); // reserve 70% for clips when hasClips
+        let p = hasClips ? Math.round(progress * 30) : Math.round(progress * 100);
+        if (useSplitExport) p = 22 + Math.round(p * 0.78);
+        setProgress(p);
       });
 
       let returnCode = await ffmpeg.exec(cmd);
@@ -900,7 +946,14 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
   };
 
   const seekTo = (t) => {
-    const time = Math.max(0, Math.min(duration, t));
+    let time = Math.max(0, Math.min(duration, t));
+    // If seeking to excluded segment, jump to next included segment
+    const seg = getSegmentAtTime(time);
+    if (seg && isSegmentExcluded(seg.start, seg.end)) {
+      // If in excluded segment, jump to its end or next included start
+      const nextTime = getNextIncludedTime(time);
+      time = nextTime < duration ? nextTime : seg.end;
+    }
     setPlayed(time);
     if (playerRef.current) playerRef.current.currentTime = time;
   };
@@ -936,6 +989,40 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
     next.delete(segmentKey(start, end));
     return next;
   });
+
+  // Find which segment a time falls into
+  const getSegmentAtTime = (time) => {
+    const segs = getSegments();
+    return segs.find(seg => time >= seg.start && time < seg.end);
+  };
+
+  // Find next included segment start time (or end of video)
+  const getNextIncludedTime = (currentTime) => {
+    const segs = getSegments();
+    for (const seg of segs) {
+      if (seg.start > currentTime && !isSegmentExcluded(seg.start, seg.end)) {
+        return seg.start;
+      }
+    }
+    return duration; // No next included segment, go to end
+  };
+
+  // Skip excluded segments during playback
+  const skipExcludedSegments = useCallback((currentTime) => {
+    if (!duration || excludedSegments.size === 0) return;
+    const seg = getSegmentAtTime(currentTime);
+    if (seg && isSegmentExcluded(seg.start, seg.end)) {
+      const nextTime = getNextIncludedTime(currentTime);
+      if (nextTime < duration && playerRef.current) {
+        playerRef.current.currentTime = nextTime;
+        setPlayed(nextTime);
+      } else if (playerRef.current) {
+        // No more included segments, pause
+        playerRef.current.pause();
+        setIsPlaying(false);
+      }
+    }
+  }, [excludedSegments, duration, splitPoints]);
 
   const exportSegmentAsFile = async (start, end, index) => {
     if (!loaded || !file) return;
@@ -1090,7 +1177,14 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       }
                       setVideoDimensions({ width: e.target.videoWidth, height: e.target.videoHeight });
                     }}
-                    onTimeUpdate={(e) => setPlayed(e.target.currentTime)}
+                    onTimeUpdate={(e) => {
+                      const currentTime = e.target.currentTime;
+                      setPlayed(currentTime);
+                      // Skip excluded segments during playback (always, not just on split tab)
+                      if (excludedSegments.size > 0) {
+                        skipExcludedSegments(currentTime);
+                      }
+                    }}
                     onEnded={() => setIsPlaying(false)}
                     onError={(e) => console.error("Video Tag Error:", e)}
                     style={{
@@ -1621,7 +1715,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             <div className="space-y-6">
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-gray-400 uppercase">Split Video</label>
-                <p className="text-[11px] text-gray-500">Click timeline to seek. Double-click to add split. Click red markers to remove.</p>
+                <p className="text-[11px] text-gray-500">Click timeline to seek. Double-click to add split. Click red markers to remove. Excluded segments (dark red) are skipped during playback.</p>
               </div>
               {duration > 0 && (
                 <>
@@ -1648,16 +1742,20 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       className="relative h-10 rounded-lg bg-gray-700 border border-gray-600 cursor-pointer overflow-hidden focus:outline-none focus:ring-2 focus:ring-red-500"
                     >
                       {/* Segment regions (alternating tint) */}
-                      {getSegments().map((seg, i) => (
-                        <div
-                          key={i}
-                          className="absolute top-0 bottom-0 bg-gray-600/40"
-                          style={{
-                            left: `${(seg.start / duration) * 100}%`,
-                            width: `${((seg.end - seg.start) / duration) * 100}%`,
-                          }}
-                        />
-                      ))}
+                      {getSegments().map((seg, i) => {
+                        const excluded = isSegmentExcluded(seg.start, seg.end);
+                        return (
+                          <div
+                            key={segmentKey(seg.start, seg.end)}
+                            className={`absolute top-0 bottom-0 ${excluded ? 'bg-red-900/60 opacity-50' : 'bg-gray-600/40'}`}
+                            style={{
+                              left: `${(seg.start / duration) * 100}%`,
+                              width: `${((seg.end - seg.start) / duration) * 100}%`,
+                            }}
+                            title={excluded ? `Excluded: ${formatTime(seg.start)} – ${formatTime(seg.end)}` : `Segment ${i + 1}: ${formatTime(seg.start)} – ${formatTime(seg.end)}`}
+                          />
+                        );
+                      })}
                       {/* Split markers: vertical lines, click to remove */}
                       {sortedSplitPoints.map((t) => (
                         <button
