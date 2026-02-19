@@ -789,16 +789,21 @@ const Dashboard = () => {
                           {/* Media Section - Plane Format (Full Height) */}
                           <div className="relative bg-white flex items-center justify-center overflow-hidden" onClick={() => handleEditReport(report)}>
                             {report.media && report.media.length > 0 ? (
-                              report.media.some(m => m.type === 'video') ? (
-                                <video
-                                  src={report.media.find(m => m.type === 'video').url}
-                                  className="w-full h-auto object-contain"
-                                  controls
-                                  playsInline
-                                  crossOrigin="anonymous"
-                                  preload="metadata"
-                                />
-                              ) : (
+                              report.media.some(m => m.type === 'video') ? (() => {
+                                const vidMedia = report.media.find(m => m.type === 'video');
+                                const videoUrl = vidMedia?.url?.startsWith('http') ? vidMedia.url : `${API_URL}${vidMedia?.url?.startsWith('/') ? '' : '/'}${vidMedia?.url || ''}`;
+                                return (
+                                  <video
+                                    src={videoUrl}
+                                    className="w-full h-auto object-contain"
+                                    controls
+                                    playsInline
+                                    crossOrigin="anonymous"
+                                    preload="metadata"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                );
+                              })() : (
                                 <img
                                   src={report.media[0].url?.startsWith('http') ? report.media[0].url : `${API_URL}${report.media[0].url.startsWith('/') ? '' : '/'}${report.media[0].url}`}
                                   alt={report.title}
