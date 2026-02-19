@@ -9,30 +9,35 @@ const PublicNavbar = ({ onSelectLogin }) => {
   return (
     <nav className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center h-16">
+          {/* Logo */}
+          <div className="flex-shrink-0 flex items-center gap-2 cursor-pointer" onClick={() => window.location.reload()}>
             <div className="h-8 w-8 bg-red-600 rounded-lg flex items-center justify-center text-white font-bold shadow-red-200 shadow-lg">
               F
             </div>
             <span className="font-bold text-xl tracking-tight text-gray-900">FieldWork</span>
           </div>
 
-          <div className="hidden md:flex items-center space-x-8">
-            <a href="#" className="text-gray-600 hover:text-red-600 font-medium transition-colors">Features</a>
+          {/* Nav Links - Left Aligned */}
+          <div className="hidden md:flex items-center ml-10 space-x-8">
+            <a href="#" className="text-gray-600 hover:text-red-600 font-medium transition-colors text-sm">Features</a>
+            <a href="#" className="text-gray-600 hover:text-red-600 font-medium transition-colors text-sm">About</a>
+            <a href="#" className="text-gray-600 hover:text-red-600 font-medium transition-colors text-sm">Contact</a>
           </div>
 
-          <div className="hidden md:flex items-center space-x-4">
+          {/* Action Buttons - Right Aligned */}
+          <div className="hidden md:flex items-center ml-auto space-x-4">
             <button
               onClick={() => onSelectLogin('reporter')}
-              className="text-gray-600 hover:text-red-600 font-medium transition-colors"
+              className="text-gray-500 hover:text-red-600 font-medium transition-colors text-sm px-3 py-2 rounded-lg hover:bg-red-50"
             >
               Reporter Login
             </button>
             <button
               onClick={() => onSelectLogin('admin')}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+              className="bg-red-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-lg shadow-red-200 hover:shadow-red-300 transform hover:-translate-y-0.5"
             >
-              Admin Login
+              Admin Portal
             </button>
           </div>
         </div>
