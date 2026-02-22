@@ -12,7 +12,39 @@ import { AnalyticsPanel } from '../components/DashboardWidgets';
 import SocialShare from '../components/SocialShare';
 import UserManagement from '../components/UserManagement';
 import AIPosterGenerator from '../components/AIPosterGenerator';
-// Removed unused imports from offlineStorage
+// Import removed unused imports from offlineStorage
+
+const compressImage = async (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1280;
+        const MAX_HEIGHT = 1280;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+        }, 'image/jpeg', 0.85); // Compress 85% quality
+      };
+    };
+  });
+};
 
 // Quick Stat Card Component for Users
 const StatCard = ({ title, count, icon: IconComponent, color }) => (
@@ -369,6 +401,23 @@ const Dashboard = () => {
 
   const handleDownload = async (url, filename) => {
     try {
+      // If it's a Cloudinary URL, we can use the fl_attachment flag to force the browser to download it directly
+      if (url.includes('cloudinary.com')) {
+        const parts = url.split('/upload/');
+        if (parts.length === 2) {
+          const downloadUrl = parts[0] + '/upload/fl_attachment/' + parts[1];
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = filename;
+          link.target = "_blank";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          return;
+        }
+      }
+
+      // Fallback for non-Cloudinary URLs or if the above logic somehow bypasses
       const response = await fetch(url, {
         mode: 'cors', // Ensure CORS is handled
       });
@@ -437,8 +486,14 @@ const Dashboard = () => {
 
           // 2. Upload Files in Parallel
           const uploadPromises = filesToUpload.map(async (item, idx) => {
+            let fileToUpload = item.file;
+            // Compress Image Before Upload for Much Quicker Times
+            if (item.type === 'image' && fileToUpload.type && !fileToUpload.type.includes('gif')) {
+              try { fileToUpload = await compressImage(fileToUpload); } catch (e) { console.error("Compression", e); }
+            }
+
             const data = new FormData();
-            data.append("file", item.file);
+            data.append("file", fileToUpload);
             data.append("api_key", apiKey);
             data.append("timestamp", timestamp);
             data.append("signature", signature);
@@ -675,7 +730,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col overflow-x-hidden w-full">
       <div className="flex flex-1 items-start w-full relative">
         {/* Sidebar */}
         <Sidebar

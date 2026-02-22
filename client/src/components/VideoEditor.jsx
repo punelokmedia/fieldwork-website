@@ -69,8 +69,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
   // Clips (video or image) - can add multiple to include in project
   const [clips, setClips] = useState([]); // [{ id, file, type: 'video'|'image', previewUrl }]
 
-  // Export format: original, reel (9:16), youtube (16:9), thumbnail (image)
   const [exportFormat, setExportFormat] = useState('original');
+  const [useReelFrame, setUseReelFrame] = useState(false);
 
   // Video crop (zoom/pan like image) — applied in FFmpeg
   const [videoCrop, setVideoCrop] = useState({ x: 0, y: 0 });
@@ -819,21 +819,114 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       }
 
       // Reel/YouTube: crop-to-fill (no black bars) — scale up to fill frame then center crop
-      if (exportFormat === 'reel') {
-        const scaleCrop = 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920';
-        returnCode = await ffmpeg.exec(['-i', outName, '-vf', scaleCrop, '-map', '0:v', '-map', '0:a?', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', 'export_reel.mp4']);
-        if (returnCode !== 0) throw new Error('Reel export failed.');
-        outName = 'export_reel.mp4';
-      } else if (exportFormat === 'youtube') {
-        const scaleCrop = 'scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080';
-        returnCode = await ffmpeg.exec(['-i', outName, '-vf', scaleCrop, '-map', '0:v', '-map', '0:a?', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', 'export_youtube.mp4']);
-        if (returnCode !== 0) throw new Error('YouTube export failed.');
-        outName = 'export_youtube.mp4';
+      let finalOutName = outName;
+
+      // Handle custom Pune Lok Frame overlay
+      if (useReelFrame) {
+        setProgress(90);
+        try {
+          // Add Pune Lok frame overlay
+          await ffmpeg.writeFile('rell.png', await fetchFile('/images/rell.png'));
+
+          // The transparent window in rell.png is approximately at x=25, y=718 with width=1017, height=1173
+          const scaleCropPad = 'scale=1017:1173:force_original_aspect_ratio=increase,crop=1017:1173,pad=1080:1920:25:718:black';
+          const frameFilter = `[0:v]${scaleCropPad}[vbase];[vbase][1:v]overlay=0:0[vfinal]`;
+
+          returnCode = await ffmpeg.exec([
+            '-i', outName,
+            '-i', 'rell.png',
+            '-filter_complex', frameFilter,
+            '-map', '[vfinal]',
+            '-map', '0:a?',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '28',
+            '-pix_fmt', 'yuv420p',
+            '-r', '30',
+            '-c:a', 'aac',
+            'export_framed.mp4'
+          ]);
+          if (returnCode !== 0) throw new Error('Frame overlay failed.');
+          finalOutName = 'export_framed.mp4';
+        } catch (overlayErr) {
+          console.error("Frame overlay error:", overlayErr);
+        }
+      }
+      // Handle normal export formats if frame is not used
+      else {
+        if (exportFormat === 'reel') {
+          const scaleCrop = 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920';
+          returnCode = await ffmpeg.exec(['-i', outName, '-vf', scaleCrop, '-map', '0:v', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', 'export_reel.mp4']);
+          if (returnCode !== 0) throw new Error('Reel export failed.');
+          finalOutName = 'export_reel.mp4';
+        } else if (exportFormat === 'youtube') {
+          const scaleCrop = 'scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080';
+          returnCode = await ffmpeg.exec(['-i', outName, '-vf', scaleCrop, '-map', '0:v', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', 'export_youtube.mp4']);
+          if (returnCode !== 0) throw new Error('YouTube export failed.');
+          finalOutName = 'export_youtube.mp4';
+        }
       }
 
-      const data = await ffmpeg.readFile(outName);
+      // Always append outerframe.mp4 at the end of the video IF IT HASN'T BEEN APPENDED ALREADY
+      const alreadyHasOutro = file.name.includes('_with_outro');
+      if (!alreadyHasOutro) {
+        try {
+          setProgress(95);
+          await ffmpeg.writeFile('outerframe.mp4', await fetchFile('/images/outerframe.mp4'));
+
+          let targetW = 1280; let targetH = 720;
+          if (exportFormat === 'reel') { targetW = 1080; targetH = 1920; }
+          else if (exportFormat === 'youtube') { targetW = 1920; targetH = 1080; }
+          else if (exportFormat === 'original') {
+            targetW = videoDimensions.width || 1280; targetH = videoDimensions.height || 720;
+            if (targetW % 2 !== 0) targetW += 1; if (targetH % 2 !== 0) targetH += 1;
+          }
+
+          const scalePad = `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30`;
+
+          // First attempt: concatenate with audio
+          let concatRes = await ffmpeg.exec([
+            '-i', finalOutName,
+            '-i', 'outerframe.mp4',
+            '-filter_complex', `[0:v]${scalePad}[v0]; [1:v]${scalePad}[v1]; [v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]`,
+            '-map', '[v]', '-map', '[a]',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac',
+            'final_with_outro.mp4'
+          ]);
+
+          if (concatRes !== 0) {
+            console.log("Audio concat failed, trying video-only concat fallback...");
+            // Fallback: concatenate video only (if either video lies missing audio)
+            concatRes = await ffmpeg.exec([
+              '-i', finalOutName,
+              '-i', 'outerframe.mp4',
+              '-filter_complex', `[0:v]${scalePad}[v0]; [1:v]${scalePad}[v1]; [v0][v1]concat=n=2:v=1:a=0[v]`,
+              '-map', '[v]',
+              '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
+              'final_with_outro.mp4'
+            ]);
+          }
+
+          if (concatRes === 0) {
+            finalOutName = 'final_with_outro.mp4';
+          } else {
+            console.warn("Outerframe append failed, using base file.");
+          }
+        } catch (e) {
+          console.error("Failure while appending outer frame:", e);
+        }
+      }
+
+      const data = await ffmpeg.readFile(finalOutName);
       const blob = new Blob([data.buffer], { type: 'video/mp4' });
-      const editedFile = new File([blob], exportFormat === 'reel' ? 'reel.mp4' : exportFormat === 'youtube' ? 'youtube.mp4' : 'edited_video.mp4', { type: 'video/mp4' });
+
+      let finalDownloadName = exportFormat === 'reel' ? 'reel.mp4' : exportFormat === 'youtube' ? 'youtube.mp4' : 'edited_video.mp4';
+      if (!finalDownloadName.includes('_with_outro')) {
+        finalDownloadName = finalDownloadName.replace('.mp4', '_with_outro.mp4');
+      }
+
+      const editedFile = new File([blob], finalDownloadName, { type: 'video/mp4' });
 
       onSave(editedFile);
 
@@ -1158,14 +1251,14 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 ) : null}
                 <div
                   ref={containerRef}
-                  className="relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 bg-black flex items-center justify-center max-h-[600px] max-w-full"
+                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-h-[600px] max-w-full ${useReelFrame ? 'aspect-[9/16] bg-transparent' : 'bg-black'}`}
                   style={{ display: activeTab === 'crop' ? 'none' : 'flex' }}
                 >
                   <video
                     ref={playerRef}
                     key={videoSrc}
                     src={videoSrc}
-                    className="max-h-[600px] w-auto h-auto object-contain"
+                    className={useReelFrame ? "absolute object-cover bg-black" : "max-h-[600px] w-auto h-auto object-contain"}
                     controls={false}
                     playsInline
                     preload="auto"
@@ -1187,72 +1280,83 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     }}
                     onEnded={() => setIsPlaying(false)}
                     onError={(e) => console.error("Video Tag Error:", e)}
-                    style={{
+                    style={useReelFrame ? {
+                      left: '2.315%', top: '37.396%', width: '94.167%', height: '61.094%',
+                      filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`
+                    } : {
                       filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`
                     }}
                   />
 
-                {/* Overlay Text Preview */}
-                {text && (
-                  <div
-                    className="absolute z-20 select-none pointer-events-none"
-                    style={{
-                      left: `${textPos.x}%`,
-                      top: `${textPos.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                      width: `${Math.min(textPos.x, 100 - textPos.x) * 2}%`,
-                    }}
-                  >
-                    <h2
-                      className="font-bold drop-shadow-lg leading-tight mx-auto inline-block relative whitespace-pre-wrap text-center pointer-events-auto"
-                      style={{
-                        color: textColor,
-                        textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                        maxWidth: '100%',
-                        border: activeTab === 'text' ? '2px dashed rgba(255,255,255,0.5)' : 'none',
-                        padding: '4px',
-                        fontSize: containerRef.current ? `${(containerRef.current.clientHeight * textSize) / 100}px` : '24px',
-                        wordBreak: 'break-word',
-                        cursor: isDragging ? 'grabbing' : 'grab'
-                      }}
-                      onMouseDown={(e) => handleDragStart(e, 'text')}
-                      onTouchStart={(e) => handleDragStart(e, 'text')}
-                    >
-                      {text}
-                    </h2>
-                  </div>
-                )}
-                {logoPreview && (
-                  <div
-                    className="absolute z-20 select-none"
-                    style={{
-                      left: `${logoPos.x}%`,
-                      top: `${logoPos.y}%`,
-                      width: `${logoSize}%`,
-                      transform: 'translate(-50%, -50%)',
-                      cursor: isDragging ? 'grabbing' : 'grab',
-                      border: activeTab === 'logo' ? '2px dashed deepskyblue' : 'none',
-                    }}
-                    onMouseDown={(e) => handleDragStart(e, 'logo')}
-                    onTouchStart={(e) => handleDragStart(e, 'logo')}
-                  >
+                  {useReelFrame && (
                     <img
-                      src={logoPreview}
-                      alt="Logo"
-                      className="w-full h-auto object-contain pointer-events-none drop-shadow-lg"
+                      src="/images/rell.png"
+                      alt="Reel Frame Overlay"
+                      className="absolute inset-0 w-full h-full pointer-events-none z-10"
                     />
-                    {/* Resize Handle */}
-                    {activeTab === 'logo' && (
-                      <div
-                        className="absolute -bottom-2 -right-2 w-6 h-6 bg-red-500 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-md z-30"
-                        onMouseDown={handleResizeStart}
-                        onTouchStart={handleResizeStart}
+                  )}
+
+                  {/* Overlay Text Preview */}
+                  {text && (
+                    <div
+                      className="absolute z-20 select-none pointer-events-none"
+                      style={{
+                        left: `${textPos.x}%`,
+                        top: `${textPos.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: `${Math.min(textPos.x, 100 - textPos.x) * 2}%`,
+                      }}
+                    >
+                      <h2
+                        className="font-bold drop-shadow-lg leading-tight mx-auto inline-block relative whitespace-pre-wrap text-center pointer-events-auto"
+                        style={{
+                          color: textColor,
+                          textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                          maxWidth: '100%',
+                          border: activeTab === 'text' ? '2px dashed rgba(255,255,255,0.5)' : 'none',
+                          padding: '4px',
+                          fontSize: containerRef.current ? `${(containerRef.current.clientHeight * textSize) / 100}px` : '24px',
+                          wordBreak: 'break-word',
+                          cursor: isDragging ? 'grabbing' : 'grab'
+                        }}
+                        onMouseDown={(e) => handleDragStart(e, 'text')}
+                        onTouchStart={(e) => handleDragStart(e, 'text')}
                       >
-                        <Maximize size={12} className="text-white" />
-                      </div>
-                    )}
-                  </div>
-                )}
+                        {text}
+                      </h2>
+                    </div>
+                  )}
+                  {logoPreview && (
+                    <div
+                      className="absolute z-20 select-none"
+                      style={{
+                        left: `${logoPos.x}%`,
+                        top: `${logoPos.y}%`,
+                        width: `${logoSize}%`,
+                        transform: 'translate(-50%, -50%)',
+                        cursor: isDragging ? 'grabbing' : 'grab',
+                        border: activeTab === 'logo' ? '2px dashed deepskyblue' : 'none',
+                      }}
+                      onMouseDown={(e) => handleDragStart(e, 'logo')}
+                      onTouchStart={(e) => handleDragStart(e, 'logo')}
+                    >
+                      <img
+                        src={logoPreview}
+                        alt="Logo"
+                        className="w-full h-auto object-contain pointer-events-none drop-shadow-lg"
+                      />
+                      {/* Resize Handle */}
+                      {activeTab === 'logo' && (
+                        <div
+                          className="absolute -bottom-2 -right-2 w-6 h-6 bg-red-500 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-md z-30"
+                          onMouseDown={handleResizeStart}
+                          onTouchStart={handleResizeStart}
+                        >
+                          <Maximize size={12} className="text-white" />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1467,52 +1571,52 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                   <p className="text-[10px] text-amber-400/90 bg-amber-500/10 px-2 py-1.5 rounded">Arrow se move: pehle <strong>preview par ek click</strong> karein, phir arrow keys dabayein.</p>
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Zoom {videoZoom.toFixed(1)}x</label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setVideoZoom(z => Math.max(VIDEO_CROP_MIN_ZOOM, z - 0.25))}
-                    className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-                  >
-                    <X size={16} className="rotate-45" />
-                  </button>
-                  <input
-                    type="range"
-                    min={VIDEO_CROP_MIN_ZOOM}
-                    max={VIDEO_CROP_MAX_ZOOM}
-                    step={0.1}
-                    value={videoZoom}
-                    onChange={(e) => setVideoZoom(parseFloat(e.target.value))}
-                    className="flex-1 h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setVideoZoom(z => Math.min(VIDEO_CROP_MAX_ZOOM, z + 0.25))}
-                    className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-                  >
-                    <Maximize size={16} />
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-400 uppercase">Crop aspect</label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { value: 'free', label: 'Free' },
-                    { value: '1:1', label: '1:1' },
-                    { value: '9:16', label: '9:16' },
-                    { value: '16:9', label: '16:9' }
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setVideoCropAspect(opt.value)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${videoCropAspect === opt.value ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVideoZoom(z => Math.max(VIDEO_CROP_MIN_ZOOM, z - 0.25))}
+                        className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+                      >
+                        <X size={16} className="rotate-45" />
+                      </button>
+                      <input
+                        type="range"
+                        min={VIDEO_CROP_MIN_ZOOM}
+                        max={VIDEO_CROP_MAX_ZOOM}
+                        step={0.1}
+                        value={videoZoom}
+                        onChange={(e) => setVideoZoom(parseFloat(e.target.value))}
+                        className="flex-1 h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setVideoZoom(z => Math.min(VIDEO_CROP_MAX_ZOOM, z + 0.25))}
+                        className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+                      >
+                        <Maximize size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-400 uppercase">Crop aspect</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 'free', label: 'Free' },
+                        { value: '1:1', label: '1:1' },
+                        { value: '9:16', label: '9:16' },
+                        { value: '16:9', label: '16:9' }
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setVideoCropAspect(opt.value)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${videoCropAspect === opt.value ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -1974,6 +2078,19 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     {opt.label}
                   </button>
                 ))}
+
+                <label className="ml-auto text-xs flex items-center gap-2 cursor-pointer bg-red-600/20 px-3 py-1.5 rounded-lg border border-red-500/50 hover:bg-red-600/30 transition-colors text-white">
+                  <input
+                    type="checkbox"
+                    checked={useReelFrame}
+                    onChange={e => {
+                      setUseReelFrame(e.target.checked);
+                      if (e.target.checked) setExportFormat('reel'); // Auto-select reel format when using frame
+                    }}
+                    className="accent-red-500"
+                  />
+                  Apply <span className="font-bold text-red-400">Pune Lok Frame</span>
+                </label>
               </div>
               <div className="flex gap-3">
                 <button onClick={onCancel} className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-xl transition-colors">

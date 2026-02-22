@@ -84,7 +84,7 @@ router.post(
     const { email, password } = req.body;
 
     try {
-      let user = await User.findOne({ email });
+      let user = await User.findOne({ email }).lean();
 
       if (!user) {
         return res.status(400).json({ errors: [{ msg: 'Invalid Credentials' }] });
@@ -98,7 +98,7 @@ router.post(
 
       const payload = {
         user: {
-          id: user.id,
+          id: user._id,
           role: user.role
         }
       };
@@ -109,7 +109,7 @@ router.post(
         { expiresIn: 360000 },
         (err, token) => {
           if (err) throw err;
-          res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+          res.json({ token, user: { id: user._id, name: user.name, role: user.role } });
         }
       );
     } catch (err) {

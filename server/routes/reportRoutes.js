@@ -101,7 +101,7 @@ router.get('/', auth, async (req, res) => {
         query.status = req.query.status;
     }
 
-    const reports = await Report.find(query).sort({ createdAt: -1 }).populate('reporterId', 'name');
+    const reports = await Report.find(query).sort({ createdAt: -1 }).limit(100).populate('reporterId', 'name').lean();
     res.json(reports);
   } catch (err) {
     console.error(err.message);
