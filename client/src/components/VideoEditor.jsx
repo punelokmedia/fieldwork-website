@@ -1275,10 +1275,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 ) : null}
                 <div
                   ref={containerRef}
-                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full max-h-[600px] w-full ${useReelFrame ? 'bg-transparent' : 'bg-black'}`}
+                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full max-h-[600px] ${useReelFrame ? 'bg-transparent h-full w-auto aspect-[9/16]' : 'bg-black w-full'}`}
                   style={{
-                    display: activeTab === 'crop' ? 'none' : 'flex',
-                    ...(useReelFrame ? { aspectRatio: '1080/1920', height: '100%' } : {})
+                    display: activeTab === 'crop' ? 'none' : 'flex'
                   }}
                 >
                   <video
