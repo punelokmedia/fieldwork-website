@@ -1275,8 +1275,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 ) : null}
                 <div
                   ref={containerRef}
-                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full ${useReelFrame ? 'bg-transparent' : 'max-h-[600px] bg-black'}`}
-                  style={{ display: activeTab === 'crop' ? 'none' : 'flex' }}
+                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full max-h-[600px] w-full ${useReelFrame ? 'bg-transparent' : 'bg-black'}`}
+                  style={{
+                    display: activeTab === 'crop' ? 'none' : 'flex',
+                    ...(useReelFrame ? { aspectRatio: '1080/1920', height: '100%' } : {})
+                  }}
                 >
                   <video
                     ref={playerRef}
@@ -1315,7 +1318,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     <img
                       src="/images/rell.png"
                       alt="Reel Frame Overlay"
-                      className="relative z-10 w-auto max-w-full max-h-[600px] object-contain pointer-events-none"
+                      className="absolute inset-0 z-10 w-full h-full object-fill pointer-events-none"
                     />
                   )}
 
