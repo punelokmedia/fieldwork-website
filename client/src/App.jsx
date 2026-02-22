@@ -5,6 +5,12 @@ import Dashboard from './pages/Dashboard';
 import AuthContext, { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 
+import Landing from './pages/Landing';
+import About from './pages/About';
+import Features from './pages/Features';
+import Contact from './pages/Contact';
+import { PublicLayout } from './components/PublicShared';
+
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
 
@@ -26,17 +32,20 @@ function App() {
       <AuthProvider>
         <ToastProvider>
           <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route path="/" element={<Navigate to="/dashboard" />} />
-        </Routes>
+            <Route path="/" element={<PublicLayout><Landing /></PublicLayout>} />
+            <Route path="/about" element={<PublicLayout><About /></PublicLayout>} />
+            <Route path="/features" element={<PublicLayout><Features /></PublicLayout>} />
+            <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/dashboard"
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }
+            />
+          </Routes>
         </ToastProvider>
       </AuthProvider>
     </Router>
