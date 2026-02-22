@@ -524,17 +524,20 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       // and overlay that image. This fixes Devanagari rendering issues.
       let textInputIndex = -1;
 
+      const baseTextCanvasW = useReelFrame ? 1080 : (videoDimensions.width || 1280);
+      const baseTextCanvasH = useReelFrame ? 1920 : (videoDimensions.height || 720);
+
       if (text) {
         try {
           const canvas = document.createElement('canvas');
-          canvas.width = videoDimensions.width;
-          canvas.height = videoDimensions.height;
+          canvas.width = baseTextCanvasW;
+          canvas.height = baseTextCanvasH;
           const ctx = canvas.getContext('2d');
 
           if (!ctx) throw new Error("Could not create canvas context");
 
           // Calculate font size
-          const fontSizePx = (videoDimensions.height * textSize) / 100;
+          const fontSizePx = (baseTextCanvasH * textSize) / 100;
           ctx.font = `bold ${fontSizePx}px Arial, sans-serif`;
           ctx.fillStyle = textColor;
           ctx.textAlign = 'center';
@@ -548,9 +551,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
           // Text Wrapping Logic
           // Calculate max available width based on center position to avoid cutting
-          const margin = videoDimensions.width * 0.05; // 5% margin
-          const availableLeft = (videoDimensions.width * textPos.x) / 100 - margin;
-          const availableRight = videoDimensions.width - ((videoDimensions.width * textPos.x) / 100) - margin;
+          const margin = baseTextCanvasW * 0.05; // 5% margin
+          const availableLeft = (baseTextCanvasW * textPos.x) / 100 - margin;
+          const availableRight = baseTextCanvasW - ((baseTextCanvasW * textPos.x) / 100) - margin;
           const maxWidth = Math.min(availableLeft, availableRight) * 2;
 
           // Split by manual newlines first
@@ -578,8 +581,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           });
 
           // Draw Text
-          const centerX = (videoDimensions.width * textPos.x) / 100;
-          const centerY = (videoDimensions.height * textPos.y) / 100;
+          const centerX = (baseTextCanvasW * textPos.x) / 100;
+          const centerY = (baseTextCanvasH * textPos.y) / 100;
           const lineHeight = fontSizePx * 1.2;
 
           finalLines.forEach((line, i) => {
@@ -621,7 +624,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       if (applyTrim && trimEnd > 0 && trimEnd > trimStart) cmd.push('-to', trimEnd.toString());
       cmd.push('-i', videoInputFile); // 0
 
-      if (logoWritten) {
+      if (logoWritten && !useReelFrame) {
         cmd.push('-i', 'logo.png');
         logoIdx = nextInputIdx++;
       }
@@ -629,7 +632,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         cmd.push('-i', 'music.mp3');
         audioIdx = nextInputIdx++;
       }
-      if (text) {
+      if (text && !useReelFrame) {
         cmd.push('-i', 'text_overlay.png');
         textIdx = nextInputIdx++;
       }
@@ -687,7 +690,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       }
 
       // 2. Logo Overlay
-      if (logoWritten) {
+      if (logoWritten && !useReelFrame) {
         const targetWidth = videoDimensions.width * (logoSize / 100);
         let w = Math.round(targetWidth);
         if (w % 2 !== 0) w += 1; // Even width
@@ -698,7 +701,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       }
 
       // 3. Text Overlay (Image)
-      if (text) {
+      if (text && !useReelFrame) {
         // Overlay at 0:0 since canvas matches video size
         filterComplex.push(`[${lastVideoStream}][${textIdx}:v]overlay=0:0[v_text]`);
         lastVideoStream = 'v_text';
@@ -828,15 +831,34 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           // Add Pune Lok frame overlay
           await ffmpeg.writeFile('rell.png', await fetchFile('/images/rell.png'));
 
+          let cmdFrame = ['-i', outName, '-i', 'rell.png'];
+          let frameFilter = '';
+          let nextFrameIdx = 2;
+          let lastFrameStream = 'vbase';
+
           // The transparent window in rell.png is approximately at x=25, y=718 with width=1017, height=1173
           const scaleCropPad = 'scale=1017:1173:force_original_aspect_ratio=increase,crop=1017:1173,pad=1080:1920:25:718:black';
-          const frameFilter = `[0:v]${scaleCropPad}[vbase];[vbase][1:v]overlay=0:0[vfinal]`;
+          frameFilter += `[0:v]${scaleCropPad}[vbase];[vbase][1:v]overlay=0:0[vframe]`;
+          lastFrameStream = 'vframe';
 
-          returnCode = await ffmpeg.exec([
-            '-i', outName,
-            '-i', 'rell.png',
+          if (logoWritten) {
+            cmdFrame.push('-i', 'logo.png');
+            const targetWidth = 1080 * (logoSize / 100);
+            let w = Math.round(targetWidth);
+            if (w % 2 !== 0) w += 1;
+            frameFilter += `;[${nextFrameIdx}:v]scale=${w}:-1[logo];[${lastFrameStream}][logo]overlay=x=(W*${logoPos.x}/100-w/2):y=(H*${logoPos.y}/100-h/2)[vlogo]`;
+            lastFrameStream = 'vlogo';
+            nextFrameIdx++;
+          }
+          if (text) {
+            cmdFrame.push('-i', 'text_overlay.png');
+            frameFilter += `;[${lastFrameStream}][${nextFrameIdx}:v]overlay=0:0[vtext]`;
+            lastFrameStream = 'vtext';
+          }
+
+          cmdFrame.push(
             '-filter_complex', frameFilter,
-            '-map', '[vfinal]',
+            '-map', `[${lastFrameStream}]`,
             '-map', '0:a?',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
@@ -845,7 +867,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             '-r', '30',
             '-c:a', 'aac',
             'export_framed.mp4'
-          ]);
+          );
+
+          returnCode = await ffmpeg.exec(cmdFrame);
           if (returnCode !== 0) throw new Error('Frame overlay failed.');
           finalOutName = 'export_framed.mp4';
         } catch (overlayErr) {
@@ -1251,7 +1275,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 ) : null}
                 <div
                   ref={containerRef}
-                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-h-[600px] max-w-full ${useReelFrame ? 'aspect-[9/16] bg-transparent' : 'bg-black'}`}
+                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full ${useReelFrame ? 'bg-transparent' : 'max-h-[600px] bg-black'}`}
                   style={{ display: activeTab === 'crop' ? 'none' : 'flex' }}
                 >
                   <video
@@ -1273,7 +1297,6 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     onTimeUpdate={(e) => {
                       const currentTime = e.target.currentTime;
                       setPlayed(currentTime);
-                      // Skip excluded segments during playback (always, not just on split tab)
                       if (excludedSegments.size > 0) {
                         skipExcludedSegments(currentTime);
                       }
@@ -1292,7 +1315,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     <img
                       src="/images/rell.png"
                       alt="Reel Frame Overlay"
-                      className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                      className="relative z-10 w-auto max-w-full max-h-[600px] object-contain pointer-events-none"
                     />
                   )}
 
