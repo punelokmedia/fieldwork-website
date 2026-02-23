@@ -4,7 +4,7 @@ import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import * as fabric from 'fabric';
 
-import { X, Check, Type as TypeIcon, Crop as CropIcon, Image as ImageIcon, RotateCcw, Download, Plus, Upload, LayoutTemplate, Languages, AlignHorizontalJustifyStart, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyEnd, ZoomIn, ZoomOut, MousePointer2 } from 'lucide-react';
+import { X, Check, Type as TypeIcon, Crop as CropIcon, Image as ImageIcon, RotateCcw, Download, Plus, Upload, LayoutTemplate, Languages, AlignHorizontalJustifyStart, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyEnd, ZoomIn, ZoomOut, MousePointer2, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 
 const CROP_MIN_ZOOM = 1;
 const CROP_MAX_ZOOM = 4;
@@ -626,9 +626,13 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
 
                             const activeObj = fabricCanvasRef.current?.getActiveObject();
                             if (activeObj) {
-                              activeObj.set('fill', newColor);
+                              if (activeObj.isEditing && activeObj.selectionStart !== activeObj.selectionEnd) {
+                                activeObj.setSelectionStyles({ fill: newColor });
+                              } else {
+                                activeObj.set('styles', {});
+                                activeObj.set('fill', newColor);
+                              }
                               fabricCanvasRef.current.requestRenderAll();
-                              // Force update state to reflect change
                               setSelectedObject(activeObj);
                             }
                           }}
@@ -650,6 +654,54 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
                         }}
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm focus:outline-none focus:border-red-500"
                       />
+                    </div>
+                  </div>
+
+                  {/* Alignment & Format Controls */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Alignment</label>
+                      <div className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded p-1">
+                        <button
+                          onClick={() => {
+                            if (selectedObject) {
+                              selectedObject.set('textAlign', 'left');
+                              fabricCanvasRef.current.requestRenderAll();
+                              setSelectedObject({ ...selectedObject }); // trigger re-render
+                            }
+                          }}
+                          className={`p-1 rounded flex-1 flex justify-center ${selectedObject?.textAlign === 'left' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                          title="Align Left"
+                        >
+                          <AlignLeft size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (selectedObject) {
+                              selectedObject.set('textAlign', 'center');
+                              fabricCanvasRef.current.requestRenderAll();
+                              setSelectedObject({ ...selectedObject });
+                            }
+                          }}
+                          className={`p-1 rounded flex-1 flex justify-center ${selectedObject?.textAlign === 'center' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                          title="Align Center"
+                        >
+                          <AlignCenter size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (selectedObject) {
+                              selectedObject.set('textAlign', 'right');
+                              fabricCanvasRef.current.requestRenderAll();
+                              setSelectedObject({ ...selectedObject });
+                            }
+                          }}
+                          className={`p-1 rounded flex-1 flex justify-center ${selectedObject?.textAlign === 'right' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                          title="Align Right"
+                        >
+                          <AlignRight size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -789,40 +841,40 @@ const ImageEditor = ({ file, onSave, onCancel }) => {
                 </div>
               </div>
             ) : (
-            <div className="absolute inset-0 w-full h-full" title="Click here then use arrow keys to move crop">
-              <Cropper
-                image={imageSrc}
-                crop={crop}
-                zoom={zoom}
-                minZoom={CROP_MIN_ZOOM}
-                maxZoom={CROP_MAX_ZOOM}
-                aspect={
-                  cropAspectOption === 'free'
-                    ? (imageNaturalAspect != null ? imageNaturalAspect : 4 / 3)
-                    : cropAspectOption === '1:1'
-                      ? 1
-                      : cropAspectOption === '9:16'
-                        ? 9 / 16
-                        : cropAspectOption === '16:9'
-                          ? 16 / 9
-                          : 4 / 3
-                }
-                onCropChange={setCrop}
-                onCropComplete={onCropAreaChange}
-                onCropAreaChange={onCropAreaChange}
-                onZoomChange={setZoom}
-                onMediaLoaded={(mediaSize) => {
-                  if (mediaSize?.naturalWidth && mediaSize?.naturalHeight) {
-                    setImageNaturalAspect(mediaSize.naturalWidth / mediaSize.naturalHeight);
+              <div className="absolute inset-0 w-full h-full" title="Click here then use arrow keys to move crop">
+                <Cropper
+                  image={imageSrc}
+                  crop={crop}
+                  zoom={zoom}
+                  minZoom={CROP_MIN_ZOOM}
+                  maxZoom={CROP_MAX_ZOOM}
+                  aspect={
+                    cropAspectOption === 'free'
+                      ? (imageNaturalAspect != null ? imageNaturalAspect : 4 / 3)
+                      : cropAspectOption === '1:1'
+                        ? 1
+                        : cropAspectOption === '9:16'
+                          ? 9 / 16
+                          : cropAspectOption === '16:9'
+                            ? 16 / 9
+                            : 4 / 3
                   }
-                }}
-                objectFit="contain"
-                roundCropAreaPixels
-                keyboardStep={12}
-                cropperProps={{ tabIndex: 0, 'aria-label': 'Crop area – use arrow keys to move' }}
-                setCropperRef={(ref) => { cropperRef.current = ref?.current ?? ref; }}
-              />
-            </div>
+                  onCropChange={setCrop}
+                  onCropComplete={onCropAreaChange}
+                  onCropAreaChange={onCropAreaChange}
+                  onZoomChange={setZoom}
+                  onMediaLoaded={(mediaSize) => {
+                    if (mediaSize?.naturalWidth && mediaSize?.naturalHeight) {
+                      setImageNaturalAspect(mediaSize.naturalWidth / mediaSize.naturalHeight);
+                    }
+                  }}
+                  objectFit="contain"
+                  roundCropAreaPixels
+                  keyboardStep={12}
+                  cropperProps={{ tabIndex: 0, 'aria-label': 'Crop area – use arrow keys to move' }}
+                  setCropperRef={(ref) => { cropperRef.current = ref?.current ?? ref; }}
+                />
+              </div>
             )
           ) : (
             <div className="shadow-2xl border border-gray-800" ref={containerRef}>

@@ -7,7 +7,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 
 import {
   Play, Pause, Scissors, Music, Download, Type, Sliders,
-  Loader2, Check, X, Volume2, Image as ImageIcon, Maximize, Film, Video, ImagePlus, Crop as CropIcon, MousePointer2, Columns3
+  Loader2, Check, X, Volume2, Image as ImageIcon, Maximize, Film, Video, ImagePlus, Crop as CropIcon, MousePointer2, Columns3, AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 
 const VIDEO_CROP_MIN_ZOOM = 1;
@@ -17,7 +17,7 @@ function formatTime(sec) {
   if (sec == null || isNaN(sec)) return '0:00';
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')} `;
 }
 
 const VideoEditor = ({ file, onSave, onCancel }) => {
@@ -52,19 +52,25 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
   // Text Overlay
   const [text, setText] = useState('');
+  const [textHtml, setTextHtml] = useState('');
+  const textEditorRef = useRef(null);
+  const selectedTextRangeRef = useRef(null); // to keep selection across inputs
   const [textColor, setTextColor] = useState('white');
   const [textSize, setTextSize] = useState(5); // Percentage of video height
+  const [textAlign, setTextAlign] = useState('center');
   const [language, setLanguage] = useState('Marathi');
   const [textPos, setTextPos] = useState({ x: 50, y: 80 }); // Percentage 0-100
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [dragTarget, setDragTarget] = useState(null); // 'text' or 'logo'
+  const dragContextRef = useRef(null);
 
   // Logo Overlay
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoPos, setLogoPos] = useState({ x: 10, y: 10 }); // Percentage
   const [logoSize, setLogoSize] = useState(15); // Percentage of width
+  const [logoOpacity, setLogoOpacity] = useState(100); // Percentage 0-100
 
   // Clips (video or image) - can add multiple to include in project
   const [clips, setClips] = useState([]); // [{ id, file, type: 'video'|'image', previewUrl }]
@@ -99,6 +105,26 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
   trimValuesRef.current = { trimStart, trimEnd };
   const clipsRef = useRef(clips);
   clipsRef.current = clips;
+
+  const applyColorToSelection = useCallback((color) => {
+    setTextColor(color);
+    if (!textEditorRef.current) return;
+
+    textEditorRef.current.focus();
+
+    const sel = window.getSelection();
+    if (selectedTextRangeRef.current) {
+      sel.removeAllRanges();
+      sel.addRange(selectedTextRangeRef.current);
+    }
+
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand('foreColor', false, color);
+
+    // Store current text again
+    setTextHtml(textEditorRef.current.innerHTML);
+    setText(textEditorRef.current.innerText || textEditorRef.current.textContent);
+  }, []);
 
   // Load FFmpeg
   useEffect(() => {
@@ -327,34 +353,41 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
   // Drag Logic
   const handleDragStart = (e, target) => {
-    e.preventDefault();
+    // Only prevent default if it's left click or touch
+    if (e.type !== 'touchstart' && e.button !== 0) return;
     setIsDragging(true);
     setDragTarget(target);
-  };
-
-  const handleDragMove = (e) => {
-    if (!isDragging || !containerRef.current || !dragTarget) return;
-
-    // Support mouse and touch
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    dragContextRef.current = {
+      startX: clientX,
+      startY: clientY,
+      startPosX: target === 'text' ? textPos.x : logoPos.x,
+      startPosY: target === 'text' ? textPos.y : logoPos.y,
+    };
+  };
 
+  const handleDragMove = useCallback((e) => {
+    if (!isDragging || !containerRef.current || !dragTarget || !dragContextRef.current) return;
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     const rect = containerRef.current.getBoundingClientRect();
 
-    // Calculate percentage relative to container
-    let x = ((clientX - rect.left) / rect.width) * 100;
-    let y = ((clientY - rect.top) / rect.height) * 100;
+    const deltaX = ((clientX - dragContextRef.current.startX) / rect.width) * 100;
+    const deltaY = ((clientY - dragContextRef.current.startY) / rect.height) * 100;
 
-    // Clamp to 0-100
-    x = Math.max(0, Math.min(100, x));
-    y = Math.max(0, Math.min(100, y));
+    let newX = dragContextRef.current.startPosX + deltaX;
+    let newY = dragContextRef.current.startPosY + deltaY;
+    newX = Math.max(0, Math.min(100, newX));
+    newY = Math.max(0, Math.min(100, newY));
 
     if (dragTarget === 'text') {
-      setTextPos({ x, y });
+      setTextPos({ x: newX, y: newY });
     } else if (dragTarget === 'logo') {
-      setLogoPos({ x, y });
+      setLogoPos({ x: newX, y: newY });
     }
-  };
+  }, [isDragging, dragTarget, textPos, logoPos]); // Added textPos, logoPos to dependencies
 
   const handleDragEnd = () => {
     setIsDragging(false);
@@ -362,41 +395,41 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
   };
 
   // Resize Logic
-  const handleResizeStart = (e) => {
+  const handleResizeStart = (e, target) => {
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);
+    setDragTarget(target);
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    dragContextRef.current = {
+      startX: clientX,
+      startY: clientY,
+      startLogoSize: logoSize,
+      startTextSize: textSize
+    };
   };
 
-  const handleResizeMove = (e) => {
-    if (!isResizing || !containerRef.current) return;
+  const handleResizeMove = useCallback((e) => {
+    if (!isResizing || !containerRef.current || !dragTarget || !dragContextRef.current) return;
 
-    // Support mouse and touch
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const rect = containerRef.current.getBoundingClientRect();
+    const deltaX = clientX - dragContextRef.current.startX;
+    const deltaPercent = (deltaX / rect.width) * 100;
 
-    // Calculate Center X of the logo in pixels relative to viewport
-    // logoPos.x is percentage from left of container
-    const relativeLeft = rect.width * (logoPos.x / 100);
-    const centerX = rect.left + relativeLeft;
-
-    // Distance from center
-    const dist = clientX - centerX;
-
-    // We assume resizing symmetrically or from center. 
-    // Logo width = 2 * |dist|
-    const newWidth = Math.abs(dist) * 2;
-
-    // Convert to percentage
-    const newSize = (newWidth / rect.width) * 100;
-
-    // Clamp
-    const clampedSize = Math.max(5, Math.min(90, newSize));
-    setLogoSize(clampedSize);
-  };
+    if (dragTarget === 'logo') {
+      const newSize = dragContextRef.current.startLogoSize + (deltaPercent * 2);
+      setLogoSize(Math.max(5, Math.min(90, newSize)));
+    } else if (dragTarget === 'text') {
+      const newSize = dragContextRef.current.startTextSize + (deltaPercent / 1.5);
+      setTextSize(Math.max(2, Math.min(30, newSize)));
+    }
+  }, [isResizing, dragTarget, logoSize, textSize]); // Added logoSize, textSize to dependencies
 
   const handleResizeEnd = () => {
     setIsResizing(false);
+    setDragTarget(null);
   };
 
   // Global listeners for smoother drag and resize
@@ -424,7 +457,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       window.removeEventListener('touchmove', handleResizeMove);
       window.removeEventListener('touchend', handleResizeEnd);
     };
-  }, [isDragging, isResizing, dragTarget, logoPos]); // Added logoPos dependency for resize calc
+  }, [isDragging, isResizing, handleDragMove, handleResizeMove]);
 
   const handleProcessVideo = async () => {
     if (!loaded) return;
@@ -539,9 +572,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           // Calculate font size
           const fontSizePx = (baseTextCanvasH * textSize) / 100;
           ctx.font = `bold ${fontSizePx}px Arial, sans-serif`;
-          ctx.fillStyle = textColor;
-          ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
+          ctx.textAlign = 'left'; // Always left because we calculate drawX per word manually
 
           // Shadow
           ctx.shadowColor = 'black';
@@ -551,44 +583,86 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
           // Text Wrapping Logic
           // Calculate max available width based on center position to avoid cutting
-          const margin = baseTextCanvasW * 0.05; // 5% margin
+          const margin = baseTextCanvasW * 0.05;
           const availableLeft = (baseTextCanvasW * textPos.x) / 100 - margin;
           const availableRight = baseTextCanvasW - ((baseTextCanvasW * textPos.x) / 100) - margin;
           const maxWidth = Math.min(availableLeft, availableRight) * 2;
 
-          // Split by manual newlines first
-          const manualLines = text.split(/\r?\n/);
-          let finalLines = [];
+          const tempDiv = document.createElement('div');
+          // Replace manual newlines with <br> to preserve formatting if there's no HTML
+          tempDiv.innerHTML = textHtml || text.replace(/\n/g, '<br>');
 
-          manualLines.forEach(mLine => {
-            const words = mLine.split(' ');
-            if (words.length === 0 || (words.length === 1 && words[0] === '')) {
-              finalLines.push('');
-              return;
-            }
+          let textSegments = [];
+          function traverse(node, currentColor) {
+            if (node.nodeType === Node.TEXT_NODE) {
+              // Keep spaces intact but break at spaces for wrapping
+              const words = node.textContent.split(/( |\t)/);
+              words.forEach(w => {
+                if (w !== '') textSegments.push({ text: w, color: currentColor });
+              });
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              let color = currentColor;
+              if (node.tagName === 'FONT' && node.color) color = node.color;
+              if (node.style && node.style.color) color = node.style.color;
 
-            let currentLine = words[0];
-            for (let i = 1; i < words.length; i++) {
-              const testLine = currentLine + " " + words[i];
-              if (ctx.measureText(testLine).width < maxWidth) {
-                currentLine = testLine;
-              } else {
-                finalLines.push(currentLine);
-                currentLine = words[i];
+              const isBlock = ['DIV', 'P', 'BR'].includes(node.tagName);
+
+              // Handle implicitly broken lines
+              if (isBlock && textSegments.length > 0 && textSegments[textSegments.length - 1].text !== '\n') {
+                textSegments.push({ text: '\n', color: currentColor });
+              }
+
+              node.childNodes.forEach(child => traverse(child, color));
+
+              if (['DIV', 'P'].includes(node.tagName) && textSegments.length > 0 && textSegments[textSegments.length - 1].text !== '\n') {
+                textSegments.push({ text: '\n', color: currentColor });
               }
             }
-            finalLines.push(currentLine);
+          }
+          traverse(tempDiv, textColor);
+
+          let lines = [];
+          let currentLine = [];
+          let currentLineWidth = 0;
+
+          textSegments.forEach(seg => {
+            if (seg.text === '\n') {
+              lines.push(currentLine);
+              currentLine = [];
+              currentLineWidth = 0;
+              return;
+            }
+            const w = ctx.measureText(seg.text).width;
+            if (currentLineWidth + w > maxWidth && currentLine.length > 0 && !seg.text.match(/^\s+$/)) {
+              lines.push(currentLine);
+              currentLine = [seg];
+              currentLineWidth = w;
+            } else {
+              currentLine.push(seg);
+              currentLineWidth += w;
+            }
           });
+          if (currentLine.length > 0) lines.push(currentLine);
 
           // Draw Text
           const centerX = (baseTextCanvasW * textPos.x) / 100;
           const centerY = (baseTextCanvasH * textPos.y) / 100;
           const lineHeight = fontSizePx * 1.2;
 
-          finalLines.forEach((line, i) => {
-            // Center block vertically around centerY
-            const y = centerY + (i - (finalLines.length - 1) / 2) * lineHeight;
-            ctx.fillText(line, centerX, y);
+          lines.forEach((lineSegments, i) => {
+            const y = centerY + (i - (lines.length - 1) / 2) * lineHeight;
+            let lineWidth = lineSegments.reduce((sum, seg) => sum + ctx.measureText(seg.text).width, 0);
+            let drawX = centerX;
+
+            if (textAlign === 'left') drawX = centerX - maxWidth / 2;
+            else if (textAlign === 'right') drawX = centerX + maxWidth / 2 - lineWidth;
+            else drawX = centerX - lineWidth / 2; // center
+
+            lineSegments.forEach(seg => {
+              ctx.fillStyle = seg.color;
+              ctx.fillText(seg.text, drawX, y);
+              drawX += ctx.measureText(seg.text).width;
+            });
           });
 
           // Convert to Blob
@@ -695,7 +769,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         let w = Math.round(targetWidth);
         if (w % 2 !== 0) w += 1; // Even width
 
-        filterComplex.push(`[${logoIdx}:v]scale=${w}:-1[logo]`);
+        // Handle opacity with colorchannelmixer
+        const opacityVal = logoOpacity / 100;
+
+        filterComplex.push(`[${logoIdx}:v]format=rgba,colorchannelmixer=aa=${opacityVal},scale=${w}:-1[logo]`);
         filterComplex.push(`[${lastVideoStream}][logo]overlay=x=(W*${logoPos.x}/100-w/2):y=(H*${logoPos.y}/100-h/2)[v_logo]`);
         lastVideoStream = 'v_logo';
       }
@@ -846,7 +923,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             const targetWidth = 1080 * (logoSize / 100);
             let w = Math.round(targetWidth);
             if (w % 2 !== 0) w += 1;
-            frameFilter += `;[${nextFrameIdx}:v]scale=${w}:-1[logo];[${lastFrameStream}][logo]overlay=x=(W*${logoPos.x}/100-w/2):y=(H*${logoPos.y}/100-h/2)[vlogo]`;
+
+            const opacityVal = logoOpacity / 100;
+            frameFilter += `;[${nextFrameIdx}:v]format=rgba,colorchannelmixer=aa=${opacityVal},scale=${w}:-1[logo];[${lastFrameStream}][logo]overlay=x=(W*${logoPos.x}/100-w/2):y=(H*${logoPos.y}/100-h/2)[vlogo]`;
             lastFrameStream = 'vlogo';
             nextFrameIdx++;
           }
@@ -1332,10 +1411,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         width: `${Math.min(textPos.x, 100 - textPos.x) * 2}%`,
                       }}
                     >
-                      <h2
-                        className="font-bold drop-shadow-lg leading-tight mx-auto inline-block relative whitespace-pre-wrap text-center pointer-events-auto"
+                      <div
+                        className="font-bold drop-shadow-lg leading-tight mx-auto block relative whitespace-pre-wrap pointer-events-auto w-full"
                         style={{
                           color: textColor,
+                          textAlign: textAlign,
                           textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
                           maxWidth: '100%',
                           border: activeTab === 'text' ? '2px dashed rgba(255,255,255,0.5)' : 'none',
@@ -1346,9 +1426,17 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         }}
                         onMouseDown={(e) => handleDragStart(e, 'text')}
                         onTouchStart={(e) => handleDragStart(e, 'text')}
-                      >
-                        {text}
-                      </h2>
+                        dangerouslySetInnerHTML={{ __html: textHtml || text.replace(/\n/g, '<br>') }}
+                      />
+                      {activeTab === 'text' && (
+                        <div
+                          className="absolute -bottom-2 -right-2 w-5 h-5 bg-red-500 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-md z-30 pointer-events-auto"
+                          onMouseDown={(e) => handleResizeStart(e, 'text')}
+                          onTouchStart={(e) => handleResizeStart(e, 'text')}
+                        >
+                          <Maximize size={10} className="text-white pointer-events-none" />
+                        </div>
+                      )}
                     </div>
                   )}
                   {logoPreview && (
@@ -1358,6 +1446,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         left: `${logoPos.x}%`,
                         top: `${logoPos.y}%`,
                         width: `${logoSize}%`,
+                        opacity: logoOpacity / 100,
                         transform: 'translate(-50%, -50%)',
                         cursor: isDragging ? 'grabbing' : 'grab',
                         border: activeTab === 'logo' ? '2px dashed deepskyblue' : 'none',
@@ -1373,11 +1462,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       {/* Resize Handle */}
                       {activeTab === 'logo' && (
                         <div
-                          className="absolute -bottom-2 -right-2 w-6 h-6 bg-red-500 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-md z-30"
-                          onMouseDown={handleResizeStart}
-                          onTouchStart={handleResizeStart}
+                          className="absolute -bottom-2 -right-2 w-6 h-6 bg-red-500 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-md z-30 pointer-events-auto"
+                          onMouseDown={(e) => handleResizeStart(e, 'logo')}
+                          onTouchStart={(e) => handleResizeStart(e, 'logo')}
                         >
-                          <Maximize size={12} className="text-white" />
+                          <Maximize size={12} className="text-white pointer-events-none" />
                         </div>
                       )}
                     </div>
@@ -1685,18 +1774,41 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-400 uppercase">Input Text (multiline)</label>
-                <textarea
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder={
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-gray-400 uppercase">Input Text (Multicolor)</label>
+                  <span className="text-[10px] text-gray-400">Select text & pick color below</span>
+                </div>
+                <div
+                  ref={textEditorRef}
+                  contentEditable
+                  onInput={(e) => {
+                    setTextHtml(e.currentTarget.innerHTML);
+                    setText(e.currentTarget.innerText || e.currentTarget.textContent);
+                  }}
+                  onMouseUp={() => {
+                    const sel = window.getSelection();
+                    if (sel.rangeCount > 0) selectedTextRangeRef.current = sel.getRangeAt(0);
+                  }}
+                  onKeyUp={() => {
+                    const sel = window.getSelection();
+                    if (sel.rangeCount > 0) selectedTextRangeRef.current = sel.getRangeAt(0);
+                  }}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 min-h-[5rem] overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner"
+                  style={{ textAlign: textAlign, outline: 'none' }}
+                  data-placeholder={
                     language === 'Marathi' ? "येथे लिहा..." :
                       language === 'Hindi' ? "यहाँ लिखें..." :
                         "Type here..."
                   }
-                  rows={3}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 resize-none"
                 />
+                <style dangerouslySetInnerHTML={{
+                  __html: `
+                  div[contenteditable]:empty:before {
+                    content: attr(data-placeholder);
+                    color: #9ca3af;
+                    pointer-events: none;
+                  }
+                `}} />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-gray-400 uppercase">Text Size {textSize}%</label>
@@ -1711,18 +1823,65 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-400 uppercase">Text Color</label>
-                <div className="flex gap-3 flex-wrap">
-                  {['white', 'black', 'red', 'yellow', 'cyan', 'lime', 'magenta', 'orange'].map(color => (
+              <div className="space-y-3">
+                <div className="flex gap-4 items-end">
+                  <div className="flex-1 space-y-2">
+                    <label className="text-xs font-semibold text-gray-400 uppercase">Text Color</label>
+                    <div className="flex gap-3 flex-wrap items-center">
+                      <input
+                        type="color"
+                        value={textColor.match(/^#[0-9a-f]{6}$/) ? textColor : '#ffffff'}
+                        onChange={(e) => {
+                          const newColor = e.target.value;
+                          applyColorToSelection(newColor);
+                        }}
+                        onClick={() => {
+                          const sel = window.getSelection();
+                          if (sel.rangeCount > 0) selectedTextRangeRef.current = sel.getRangeAt(0);
+                        }}
+                        className="w-10 h-10 rounded cursor-pointer bg-transparent border-0 p-0 flex-shrink-0 focus:outline-none focus:ring-1 focus:ring-red-500"
+                      />
+                      {['white', 'black', 'red', 'yellow', 'cyan', 'lime', 'magenta', 'orange'].map(color => (
+                        <button
+                          key={color}
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // Prevents selection loss in contentEditable
+                            applyColorToSelection(color);
+                          }}
+                          className={`w-8 h-8 rounded-full border-2 transition-all ${textColor === color ? 'border-white scale-110 shadow-lg' : 'border-transparent hover:scale-105'} flex-shrink-0`}
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 border-t border-gray-700/50 pt-3">
+                  <label className="text-xs font-semibold text-gray-400 uppercase">Alignment</label>
+                  <div className="flex items-center gap-1 bg-gray-800 border border-gray-600 rounded p-1 w-full max-w-[200px]">
                     <button
-                      key={color}
-                      onClick={() => setTextColor(color)}
-                      className={`w-8 h-8 rounded-full border-2 transition-all ${textColor === color ? 'border-white scale-110 shadow-lg' : 'border-transparent hover:scale-105'}`}
-                      style={{ backgroundColor: color }}
-                      title={color}
-                    />
-                  ))}
+                      onClick={() => setTextAlign('left')}
+                      className={`p-1 rounded flex-1 flex justify-center ${textAlign === 'left' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                      title="Align Left"
+                    >
+                      <AlignLeft size={16} />
+                    </button>
+                    <button
+                      onClick={() => setTextAlign('center')}
+                      className={`p-1 rounded flex-1 flex justify-center ${textAlign === 'center' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                      title="Align Center"
+                    >
+                      <AlignCenter size={16} />
+                    </button>
+                    <button
+                      onClick={() => setTextAlign('right')}
+                      className={`p-1 rounded flex-1 flex justify-center ${textAlign === 'right' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                      title="Align Right"
+                    >
+                      <AlignRight size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
