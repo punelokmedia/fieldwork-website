@@ -582,11 +582,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           ctx.shadowOffsetY = 2;
 
           // Text Wrapping Logic
-          // Calculate max available width based on center position to avoid cutting
-          const margin = baseTextCanvasW * 0.05;
-          const availableLeft = (baseTextCanvasW * textPos.x) / 100 - margin;
-          const availableRight = baseTextCanvasW - ((baseTextCanvasW * textPos.x) / 100) - margin;
-          const maxWidth = Math.min(availableLeft, availableRight) * 2;
+          // Set a boundary almost as wide as the video to allow long texts instead of dynamically restricting bounds based on center.
+          const margin = baseTextCanvasW * 0.02;
+          const maxWidth = baseTextCanvasW - (margin * 2);
 
           const tempDiv = document.createElement('div');
           // Replace manual newlines with <br> to preserve formatting if there's no HTML
@@ -644,6 +642,13 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           });
           if (currentLine.length > 0) lines.push(currentLine);
 
+          // Find the actual widest line to set correct bounding box
+          let maxLineWidth = 0;
+          lines.forEach(lineSegments => {
+            const w = lineSegments.reduce((sum, seg) => sum + ctx.measureText(seg.text).width, 0);
+            if (w > maxLineWidth) maxLineWidth = w;
+          });
+
           // Draw Text
           const centerX = (baseTextCanvasW * textPos.x) / 100;
           const centerY = (baseTextCanvasH * textPos.y) / 100;
@@ -654,8 +659,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             let lineWidth = lineSegments.reduce((sum, seg) => sum + ctx.measureText(seg.text).width, 0);
             let drawX = centerX;
 
-            if (textAlign === 'left') drawX = centerX - maxWidth / 2;
-            else if (textAlign === 'right') drawX = centerX + maxWidth / 2 - lineWidth;
+            if (textAlign === 'left') drawX = centerX - maxLineWidth / 2;
+            else if (textAlign === 'right') drawX = centerX + maxLineWidth / 2 - lineWidth;
             else drawX = centerX - lineWidth / 2; // center
 
             lineSegments.forEach(seg => {
@@ -1408,7 +1413,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         left: `${textPos.x}%`,
                         top: `${textPos.y}%`,
                         transform: 'translate(-50%, -50%)',
-                        width: `${Math.min(textPos.x, 100 - textPos.x) * 2}%`,
+                        width: 'max-content',
+                        maxWidth: '98%',
                       }}
                     >
                       <div
