@@ -442,8 +442,8 @@ const Dashboard = () => {
     }
   };
 
-  const handleSubmit = async (e, directVideoFile = null) => {
-    if (e && e.preventDefault) e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
     // Offline Handling
     if (isOffline) {
@@ -473,8 +473,7 @@ const Dashboard = () => {
 
       // Identify files
       if (selectedImage) filesToUpload.push({ file: selectedImage, type: 'image', caption: imageCaption });
-      const videoToUse = directVideoFile || selectedVideo;
-      if (videoToUse) filesToUpload.push({ file: videoToUse, type: 'video', caption: videoCaption });
+      if (selectedVideo) filesToUpload.push({ file: selectedVideo, type: 'video', caption: videoCaption });
 
       // If we have files, try client-side upload first
       if (filesToUpload.length > 0) {
@@ -483,17 +482,14 @@ const Dashboard = () => {
           const signRes = await axios.get(`${API_URL}/api/reports/upload-signature`);
           const { signature, timestamp, cloudName, apiKey } = signRes.data;
 
-          setUploadProgress(20);
+          setUploadProgress(30);
 
           // 2. Upload Files in Parallel
-          // We'll track progress for each file to calculate a combined percentage
-          const individualProgress = new Array(filesToUpload.length).fill(0);
-
           const uploadPromises = filesToUpload.map(async (item, idx) => {
             let fileToUpload = item.file;
-            // Compress Image Before Upload for Much Quicker Times (if applicable)
+            // Compress Image Before Upload for Much Quicker Times
             if (item.type === 'image' && fileToUpload.type && !fileToUpload.type.includes('gif')) {
-              try { fileToUpload = await compressImage(fileToUpload); } catch (e) { console.error("Compression Error", e); }
+              try { fileToUpload = await compressImage(fileToUpload); } catch (e) { console.error("Compression", e); }
             }
 
             const data = new FormData();
@@ -501,20 +497,16 @@ const Dashboard = () => {
             data.append("api_key", apiKey);
             data.append("timestamp", timestamp);
             data.append("signature", signature);
-            data.append("folder", "field_reports");
-
-            // Explicitly set resource type for videos for better Cloudinary optimization
-            const resourceType = item.type === 'video' ? 'video' : 'auto';
+            data.append("folder", "field_reports"); // Must match server folder
 
             const cloudinaryRes = await axios.post(
-              `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
+              `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
               data,
               {
                 onUploadProgress: (p) => {
-                  individualProgress[idx] = Math.round((p.loaded * 100) / p.total);
-                  const totalPercent = individualProgress.reduce((sum, current) => sum + current, 0) / filesToUpload.length;
-                  // Map 20-90% to Cloudinary upload phase
-                  setUploadProgress(Math.min(90, 20 + (totalPercent * 0.7)));
+                  const percent = Math.round((p.loaded * 100) / p.total);
+                  // Rough progress estimation for combined files
+                  setUploadProgress(30 + (percent * 0.5));
                 }
               }
             );
@@ -522,85 +514,54 @@ const Dashboard = () => {
             return {
               url: cloudinaryRes.data.secure_url,
               publicId: cloudinaryRes.data.public_id,
-              type: item.type,
+              type: item.type, // 'image' or 'video'
               caption: item.caption
             };
           });
 
           const uploadedMedia = await Promise.all(uploadPromises);
           mediaItems.push(...uploadedMedia);
-          setUploadProgress(92);
+
+          // Add these to formData as JSON
+          formData.append('mediaItems', JSON.stringify(mediaItems));
+
+          // Clear file appends from original logic (we uploaded them manually)
+          // We don't append 'media' files anymore if client upload succeeded
+
         } catch (uploadErr) {
-          console.error("Client-side direct upload failed, falling back to server-integrated upload:", uploadErr);
-          // We will use formData fallback below if mediaItems is empty
+          console.error("Client-side upload failed, falling back to server upload:", uploadErr);
+          // Fallback: Append files normally if client upload fails
+          if (selectedImage) formData.append('media', selectedImage);
+          if (selectedVideo) formData.append('media', selectedVideo);
+
+          // Append captions for fallback logic
+          if (mediaType === 'image') {
+            formData.append('captions', imageCaption);
+            if (videoCaption) formData.append('captions', videoCaption);
+          } else {
+            formData.append('captions', videoCaption);
+            if (imageCaption) formData.append('captions', imageCaption);
+          }
         }
       }
       // ---------------------------------------------------------
       // OPTIMIZED UPLOAD END
       // ---------------------------------------------------------
 
-      setUploadProgress(95);
-
-      // Submit final report data
-      // If we have mediaItems, we can send as JSON (faster/bypass multer)
-      // If not, we use traditional FormData (handles fallback or no-media cases)
-      if (mediaItems.length > 0) {
-        const reportData = {
-          title: title || `Report - ${new Date().toLocaleString()}`,
-          description: desc,
-          keywords: keywords,
-          hashtags: hashtags,
-          mediaItems: mediaItems // This is our pre-uploaded array
-        };
-
-        if (location) {
-          reportData.latitude = location.latitude;
-          reportData.longitude = location.longitude;
-          reportData.address = location.address;
-        }
-
-        const headers = { 'x-auth-token': token };
-
-        if (editingReportId) {
-          await axios.put(`${API_URL}/api/reports/${editingReportId}`, reportData, { headers });
-        } else {
-          await axios.post(`${API_URL}/api/reports`, reportData, { headers });
-        }
+      if (editingReportId) {
+        await axios.put(`${API_URL}/api/reports/${editingReportId}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'x-auth-token': token
+          }
+        });
       } else {
-        // Fallback to FormData (Multipart) for traditional uploads
-        const fallbackData = new FormData();
-        fallbackData.append('title', title || `Report - ${new Date().toLocaleString()}`);
-        fallbackData.append('description', desc);
-        fallbackData.append('keywords', keywords);
-        fallbackData.append('hashtags', hashtags);
-        if (location) {
-          fallbackData.append('latitude', location.latitude);
-          fallbackData.append('longitude', location.longitude);
-          fallbackData.append('address', location.address);
-        }
-
-        // Original fallback logic for files that weren't pre-uploaded
-        if (selectedImage) fallbackData.append('media', selectedImage);
-        if (selectedVideo) fallbackData.append('media', selectedVideo);
-
-        // Append captions for fallback logic
-        const captions = [];
-        if (selectedImage) captions.push(imageCaption);
-        if (selectedVideo) captions.push(videoCaption);
-        if (captions.length > 0) {
-          captions.forEach(c => fallbackData.append('captions', c));
-        }
-
-        const headers = {
-          'Content-Type': 'multipart/form-data',
-          'x-auth-token': token
-        };
-
-        if (editingReportId) {
-          await axios.put(`${API_URL}/api/reports/${editingReportId}`, fallbackData, { headers });
-        } else {
-          await axios.post(`${API_URL}/api/reports`, fallbackData, { headers });
-        }
+        await axios.post(`${API_URL}/api/reports`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'x-auth-token': token
+          }
+        });
       }
 
       setUploadProgress(100);
@@ -613,7 +574,7 @@ const Dashboard = () => {
         fetchReports();
       }, 500);
     } catch (err) {
-      console.error('Final dispatch error:', err);
+      console.error(err);
       alert('Error saving report: ' + (err.response?.data?.msg || err.message));
       setIsUploading(false);
     }
@@ -708,13 +669,6 @@ const Dashboard = () => {
       }
       setSelectedVideo(file);
       // We don't change video preview URL as it's the same file, just with CSS filters applied
-
-      // Auto-submit after editing is done (USER requested quick upload after 100%)
-      if (!editingReportId) {
-        setTimeout(() => {
-          handleSubmit(null, file);
-        }, 300);
-      }
     } else {
       setSelectedImage(file);
       setImagePreview(URL.createObjectURL(file));
