@@ -1914,18 +1914,33 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
               {logoFile && (
                 <div className="space-y-4 pt-4 border-t border-gray-700">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">
-                      Size {logoSize}%
-                    </label>
-                    <input
-                      type="range"
-                      min="5"
-                      max="50"
-                      value={logoSize}
-                      onChange={(e) => setLogoSize(parseInt(e.target.value))}
-                      className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
-                    />
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">
+                        Size {logoSize}%
+                      </label>
+                      <input
+                        type="range"
+                        min="5"
+                        max="50"
+                        value={logoSize}
+                        onChange={(e) => setLogoSize(parseInt(e.target.value))}
+                        className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">
+                        Opacity {logoOpacity}%
+                      </label>
+                      <input
+                        type="range"
+                        min="10"
+                        max="100"
+                        value={logoOpacity}
+                        onChange={(e) => setLogoOpacity(parseInt(e.target.value))}
+                        className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
+                      />
+                    </div>
                   </div>
                   <div className="p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
                     <p className="text-xs text-blue-200">
