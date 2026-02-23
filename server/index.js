@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const connectDB = require('./config/db');
 const cors = require('cors');
+const compression = require('compression');
 
 const app = express();
 
@@ -9,6 +10,7 @@ const app = express();
 connectDB();
 
 // Init Middleware
+app.use(compression());
 app.use(express.json());
 app.use(cors());
 app.use((req, res, next) => {

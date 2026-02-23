@@ -8,6 +8,14 @@ const socialMedia = require('../utils/socialMedia');
 
 const { upload, cloudinary } = require('../config/cloudinary');
 
+// Middleware to only run multer if it's a multipart request
+const conditionalUpload = (req, res, next) => {
+    if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+        return upload.array('media')(req, res, next);
+    }
+    next();
+};
+
 // @route   GET /api/reports/upload-signature
 // @desc    Get signature for client-side upload
 // @access  Private
@@ -34,7 +42,7 @@ router.get('/upload-signature', auth, (req, res) => {
 // @route   POST /api/reports
 // @desc    Create a report
 // @access  Private
-router.post('/', auth, upload.array('media'), async (req, res) => {
+router.post('/', auth, conditionalUpload, async (req, res) => {
   try {
     const { title, description, latitude, longitude, address, keywords, hashtags, mediaItems } = req.body;
     
@@ -134,7 +142,7 @@ router.get('/:id', auth, async (req, res) => {
 // @route   PUT /:id
 // @desc    Update report
 // @access  Private
-router.put('/:id', [auth, upload.array('media')], async (req, res) => {
+router.put('/:id', [auth, conditionalUpload], async (req, res) => {
   try {
     let report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ msg: 'Report not found' });
