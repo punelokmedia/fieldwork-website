@@ -29,26 +29,41 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
   // Video State
   const [videoSrc, setVideoSrc] = useState(null);
+  const [video2Src, setVideo2Src] = useState(null);
+  const [video2File, setVideo2File] = useState(null);
   const [duration, setDuration] = useState(0);
   const [played, setPlayed] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
   const playerRef = useRef(null);
+  const secondPlayerRef = useRef(null);
+  const [editingVideo, setEditingVideo] = useState('v1'); // 'v1' or 'v2'
+
+
 
   // Edit State
   const [activeTab, setActiveTab] = useState('trim'); // trim, filter, text, audio
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0); // Default to 0 (auto-detect)
+  const [v2TrimStart, setV2TrimStart] = useState(0);
+  const [v2TrimEnd, setV2TrimEnd] = useState(0);
+
 
   // Filters
-  const [brightness, setBrightness] = useState(1); // 1 is default for ffmpeg eq
+  const [brightness, setBrightness] = useState(1);
   const [contrast, setContrast] = useState(1);
   const [saturation, setSaturation] = useState(1);
+
+  const [v2Brightness, setV2Brightness] = useState(1);
+  const [v2Contrast, setV2Contrast] = useState(1);
+  const [v2Saturation, setV2Saturation] = useState(1);
+
 
   // Audio State
   const [audioFile, setAudioFile] = useState(null);
   const [audioVolume, setAudioVolume] = useState(1);
-  const [videoVolume, setVideoVolume] = useState(1);
+  const [video1Volume, setVideo1Volume] = useState(1);
+  const [video2Volume, setVideo2Volume] = useState(1);
 
   // Text Overlay
   const [text, setText] = useState('');
@@ -77,13 +92,22 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
   const [exportFormat, setExportFormat] = useState('original');
   const [useReelFrame, setUseReelFrame] = useState(false);
+  const [useDoubleFrame, setUseDoubleFrame] = useState(false);
+  const [reelZoom, setReelZoom] = useState(1);
+
+
 
   // Video crop (zoom/pan like image) — applied in FFmpeg
   const [videoCrop, setVideoCrop] = useState({ x: 0, y: 0 });
   const [videoZoom, setVideoZoom] = useState(1);
   const [videoCroppedAreaPixels, setVideoCroppedAreaPixels] = useState(null);
-  const [videoCroppedAreaPercent, setVideoCroppedAreaPercent] = useState(null);
+
+  const [v2VideoCrop, setV2VideoCrop] = useState({ x: 0, y: 0 });
+  const [v2VideoZoom, setV2VideoZoom] = useState(1);
+  const [v2VideoCroppedAreaPixels, setV2VideoCroppedAreaPixels] = useState(null);
+
   const [videoCropAspect, setVideoCropAspect] = useState('free'); // free, 1:1, 9:16, 16:9
+
   const [cropPreviewSrc, setCropPreviewSrc] = useState(null); // one frame for Cropper UI
   const videoCropperRef = useRef(null);
   // Select-area crop (drag rectangle + handles) — like Image Editor
@@ -195,14 +219,14 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
   // Capture one video frame for crop preview when Crop tab is active
   useEffect(() => {
-    if (activeTab !== 'crop' || !videoSrc) {
+    if (activeTab !== 'crop' || (editingVideo === 'v1' ? !videoSrc : !video2Src)) {
       if (cropPreviewSrc) {
         URL.revokeObjectURL(cropPreviewSrc);
         setCropPreviewSrc(null);
       }
       return;
     }
-    const video = playerRef.current;
+    const video = editingVideo === 'v1' ? playerRef.current : secondPlayerRef.current;
     if (!video) return;
     const capture = () => {
       try {
@@ -228,12 +252,17 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       video.addEventListener('loadeddata', capture, { once: true });
       return () => video.removeEventListener('loadeddata', capture);
     }
-  }, [activeTab, videoSrc, videoDimensions.width, videoDimensions.height]);
+  }, [activeTab, videoSrc, video2Src, editingVideo, videoDimensions.width, videoDimensions.height]);
+
 
   const onVideoCropAreaChange = useCallback((croppedArea, croppedAreaPixels) => {
-    setVideoCroppedAreaPercent(croppedArea);
-    setVideoCroppedAreaPixels(croppedAreaPixels);
-  }, []);
+    if (editingVideo === 'v1') {
+      setVideoCroppedAreaPixels(croppedAreaPixels);
+    } else {
+      setV2VideoCroppedAreaPixels(croppedAreaPixels);
+    }
+  }, [editingVideo]);
+
 
   // Focus cropper for arrow keys when Crop tab active and preview ready
   useEffect(() => {
@@ -262,7 +291,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       e.preventDefault();
       e.stopPropagation();
       el.focus({ preventScroll: true });
-      const newCrop = { ...videoCrop };
+      const newCrop = editingVideo === 'v1' ? { ...videoCrop } : { ...v2VideoCrop };
       switch (e.key) {
         case 'ArrowUp': newCrop.y -= step; break;
         case 'ArrowDown': newCrop.y += step; break;
@@ -270,7 +299,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         case 'ArrowRight': newCrop.x += step; break;
         default: return;
       }
-      setVideoCrop(newCrop);
+      if (editingVideo === 'v1') setVideoCrop(newCrop);
+      else setV2VideoCrop(newCrop);
+
       // Sync crop area for export: map crop box (container coords) to media pixels using zoom and translation
       requestAnimationFrame(() => {
         const container = el.parentElement;
@@ -284,7 +315,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         const scale = Math.min(cw / vw, ch / vh);
         const offsetX = (cw - vw * scale) / 2;
         const offsetY = (ch - vh * scale) / 2;
-        const eff = scale * videoZoom;
+        const eff = scale * (editingVideo === 'v1' ? videoZoom : v2VideoZoom);
         const px = (cropRect.left - cr.left - offsetX - newCrop.x) / eff;
         const py = (cropRect.top - cr.top - offsetY - newCrop.y) / eff;
         const pw = cropRect.width / eff;
@@ -293,18 +324,19 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         const y = Math.max(0, Math.min(py, vh - 2));
         const w = Math.max(2, Math.min(pw, vw - x));
         const h = Math.max(2, Math.min(ph, vh - y));
-        setVideoCroppedAreaPixels({ x, y, width: w, height: h });
-        setVideoCroppedAreaPercent({
-          x: (x / vw) * 100,
-          y: (y / vh) * 100,
-          width: (w / vw) * 100,
-          height: (h / vh) * 100
-        });
+
+        if (editingVideo === 'v1') {
+          setVideoCroppedAreaPixels({ x, y, width: w, height: h });
+        } else {
+          setV2VideoCroppedAreaPixels({ x, y, width: w, height: h });
+        }
       });
+
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [activeTab, cropPreviewSrc, videoCrop]);
+  }, [activeTab, cropPreviewSrc, videoCrop, v2VideoCrop, editingVideo, videoZoom, v2VideoZoom, videoDimensions.width, videoDimensions.height]);
+
 
   // Sync Play State
   useEffect(() => {
@@ -312,7 +344,12 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       if (isPlaying) playerRef.current.play().catch(e => console.error("Play error:", e));
       else playerRef.current.pause();
     }
+    if (secondPlayerRef.current) {
+      if (isPlaying) secondPlayerRef.current.play().catch(e => console.error("Play error:", e));
+      else secondPlayerRef.current.pause();
+    }
   }, [isPlaying]);
+
 
   // Polling for duration as backup
   useEffect(() => {
@@ -406,8 +443,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       startX: clientX,
       startY: clientY,
       startLogoSize: logoSize,
-      startTextSize: textSize
+      startTextSize: textSize,
+      startZoom: videoZoom,
+      startZoom2: v2VideoZoom
     };
+
   };
 
   const handleResizeMove = useCallback((e) => {
@@ -424,7 +464,14 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
     } else if (dragTarget === 'text') {
       const newSize = dragContextRef.current.startTextSize + (deltaPercent / 1.5);
       setTextSize(Math.max(2, Math.min(30, newSize)));
+    } else if (dragTarget === 'video1') {
+      const newZoom = dragContextRef.current.startZoom + (deltaPercent / 50);
+      setVideoZoom(Math.max(1, Math.min(5, newZoom)));
+    } else if (dragTarget === 'video2') {
+      const newZoom = dragContextRef.current.startZoom2 + (deltaPercent / 50);
+      setV2VideoZoom(Math.max(1, Math.min(5, newZoom)));
     }
+
   }, [isResizing, dragTarget, logoSize, textSize]); // Added logoSize, textSize to dependencies
 
   const handleResizeEnd = () => {
@@ -535,13 +582,25 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         try {
           await ffmpeg.writeFile('music.mp3', await fetchFile(audioFile));
           console.log("Success: Wrote music.mp3");
-          cmd.push('-i', 'music.mp3'); // Input 2 (or 1 if no logo)
-          currentInputIndex++;
+          cmd.push('-i', 'music.mp3'); // Input index tracking is handled below
           audioWritten = true;
         } catch (audioErr) {
           console.error("Failed to write audio file:", audioErr);
         }
       }
+
+      // Add Second Video Input for Double Frame
+      let video2Written = false;
+      if (useDoubleFrame && video2File) {
+        try {
+          await ffmpeg.writeFile('input2.mp4', await fetchFile(video2File));
+          console.log("Success: Wrote input2.mp4");
+          video2Written = true;
+        } catch (v2Err) {
+          console.error("Failed to write second video file:", v2Err);
+        }
+      }
+
 
       // 1. EQ Filter
       if (brightness !== 1 || contrast !== 1 || saturation !== 1) {
@@ -557,8 +616,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       // and overlay that image. This fixes Devanagari rendering issues.
       let textInputIndex = -1;
 
-      const baseTextCanvasW = useReelFrame ? 1080 : (videoDimensions.width || 1280);
-      const baseTextCanvasH = useReelFrame ? 1920 : (videoDimensions.height || 720);
+      const baseTextCanvasW = (useReelFrame || useDoubleFrame || exportFormat === 'reel') ? 1080 : ((exportFormat === 'youtube') ? 1920 : (videoDimensions.width || 1280));
+      const baseTextCanvasH = (useReelFrame || useDoubleFrame || exportFormat === 'reel') ? 1920 : ((exportFormat === 'youtube') ? 1080 : (videoDimensions.height || 720));
+
+
 
       if (text) {
         try {
@@ -582,9 +643,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           ctx.shadowOffsetY = 2;
 
           // Text Wrapping Logic
-          // Set a boundary almost as wide as the video to allow long texts instead of dynamically restricting bounds based on center.
-          const margin = baseTextCanvasW * 0.02;
-          const maxWidth = baseTextCanvasW - (margin * 2);
+          const maxWidth = baseTextCanvasW * 0.94;
+
+
+
 
           const tempDiv = document.createElement('div');
           // Replace manual newlines with <br> to preserve formatting if there's no HTML
@@ -694,6 +756,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       let nextInputIdx = 1;
       let logoIdx = -1;
       let audioIdx = -1;
+      let video2Idx = -1;
       let textIdx = -1;
 
       // Reset CMD inputs to be clean
@@ -703,18 +766,30 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       if (applyTrim && trimEnd > 0 && trimEnd > trimStart) cmd.push('-to', trimEnd.toString());
       cmd.push('-i', videoInputFile); // 0
 
-      if (logoWritten && !useReelFrame) {
+      if (logoWritten && !useReelFrame && !useDoubleFrame) {
         cmd.push('-i', 'logo.png');
         logoIdx = nextInputIdx++;
       }
+
       if (audioWritten) {
         cmd.push('-i', 'music.mp3');
         audioIdx = nextInputIdx++;
       }
-      if (text && !useReelFrame) {
+
+      // FOR DOUBLE FRAME: Pass 1 should be as raw as possible. 
+      // Do NOT add video2Idx here to avoid double-decoding/memory crash in Pass 1.
+      if (video2Written && !useDoubleFrame) {
+        cmd.push('-i', 'input2.mp4');
+        video2Idx = nextInputIdx++;
+      }
+
+      if (text && !useReelFrame && !useDoubleFrame) {
         cmd.push('-i', 'text_overlay.png');
         textIdx = nextInputIdx++;
       }
+
+
+
 
       // FILTER CHAIN
       // 0. Video crop — zoom/pan (moveZoom) or select-area (select) like Image Editor
@@ -740,13 +815,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         cropY = videoCroppedAreaPixels.y;
         cropW = videoCroppedAreaPixels.width;
         cropH = videoCroppedAreaPixels.height;
-      } else if (videoCroppedAreaPercent && videoCroppedAreaPercent.width > 0 && videoCroppedAreaPercent.height > 0) {
-        cropX = (videoCroppedAreaPercent.x / 100) * W;
-        cropY = (videoCroppedAreaPercent.y / 100) * H;
-        cropW = (videoCroppedAreaPercent.width / 100) * W;
-        cropH = (videoCroppedAreaPercent.height / 100) * H;
       }
-      if (cropX != null && cropW > 0 && cropH > 0) {
+
+      if (cropX != null && cropW > 0 && cropH > 0 && !useDoubleFrame) {
         let x = Math.round(cropX);
         let y = Math.round(cropY);
         let w = Math.round(cropW);
@@ -761,15 +832,17 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         lastVideoStream = 'v_crop';
       }
 
+
       // 1. EQ
-      if (brightness !== 1 || contrast !== 1 || saturation !== 1) {
+      if ((brightness !== 1 || contrast !== 1 || saturation !== 1) && !useDoubleFrame) {
         let eqFilter = `eq=brightness=${brightness - 1}:contrast=${contrast}:saturation=${saturation}`;
         filterComplex.push(`[${lastVideoStream}]${eqFilter}[v_eq]`);
         lastVideoStream = 'v_eq';
       }
 
+
       // 2. Logo Overlay
-      if (logoWritten && !useReelFrame) {
+      if (logoWritten && !useReelFrame && !useDoubleFrame) {
         const targetWidth = videoDimensions.width * (logoSize / 100);
         let w = Math.round(targetWidth);
         if (w % 2 !== 0) w += 1; // Even width
@@ -783,30 +856,48 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       }
 
       // 3. Text Overlay (Image)
-      if (text && !useReelFrame) {
+      if (text && !useReelFrame && !useDoubleFrame) {
         // Overlay at 0:0 since canvas matches video size
         filterComplex.push(`[${lastVideoStream}][${textIdx}:v]overlay=0:0[v_text]`);
         lastVideoStream = 'v_text';
       }
 
       // 4. Audio Mixing
-      if (audioWritten) {
-        filterComplex.push(`[0:a]volume=${videoVolume}[a1]`);
-        filterComplex.push(`[${audioIdx}:a]volume=${audioVolume}[a2]`);
-        filterComplex.push(`[a1][a2]amix=inputs=2:duration=first[aout]`);
+      let audioStreams = [];
+      if (!useDoubleFrame) {
+        filterComplex.push(`[0:a]volume=${video1Volume}[a1]`);
+        audioStreams.push('[a1]');
 
-        filterComplex.push(`[${lastVideoStream}]format=yuv420p[v_final]`);
-        lastVideoStream = 'v_final';
+        if (video2Written && video2Idx !== -1) {
+          filterComplex.push(`[${video2Idx}:a]volume=${video2Volume}[a2]`);
+          audioStreams.push('[a2]');
+        }
 
-        cmd.push('-map', `[${lastVideoStream}]`);
-        cmd.push('-map', '[aout]');
-      } else {
-        filterComplex.push(`[${lastVideoStream}]format=yuv420p[v_final]`);
-        lastVideoStream = 'v_final';
-
-        cmd.push('-map', `[${lastVideoStream}]`);
-        cmd.push('-map', '0:a');
+        if (audioWritten && audioIdx !== -1) {
+          filterComplex.push(`[${audioIdx}:a]volume=${audioVolume}[amusic]`);
+          audioStreams.push('[amusic]');
+        }
       }
+
+
+      if (audioStreams.length > 0) {
+        if (audioStreams.length > 1) {
+          filterComplex.push(`${audioStreams.join('')}amix=inputs=${audioStreams.length}:duration=first[aout]`);
+          cmd.push('-map', '[aout]');
+        } else {
+          // Map the single filtered audio stream (e.g. [a1])
+          cmd.push('-map', audioStreams[0]);
+        }
+      } else {
+        cmd.push('-map', '0:a?');
+      }
+
+      filterComplex.push(`[${lastVideoStream}]format=yuv420p[v_final]`);
+      lastVideoStream = 'v_final';
+      cmd.push('-map', `[${lastVideoStream}]`);
+
+
+
 
       if (filterComplex.length > 0) {
         cmd.push('-filter_complex', filterComplex.join(';'));
@@ -919,7 +1010,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           let lastFrameStream = 'vbase';
 
           // The transparent window in rell.png is approximately at x=25, y=718 with width=1017, height=1173
-          const scaleCropPad = 'scale=1017:1173:force_original_aspect_ratio=increase,crop=1017:1173,pad=1080:1920:25:718:black';
+          const scaleCropPad = `scale=${Math.round(1017 * reelZoom)}:${Math.round(1173 * reelZoom)}:force_original_aspect_ratio=increase,crop=1017:1173,pad=1080:1920:25:718:black`;
+
           frameFilter += `[0:v]${scaleCropPad}[vbase];[vbase][1:v]overlay=0:0[vframe]`;
           lastFrameStream = 'vframe';
 
@@ -959,11 +1051,138 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         } catch (overlayErr) {
           console.error("Frame overlay error:", overlayErr);
         }
+      } else if (useDoubleFrame) {
+        setProgress(90);
+        try {
+          await ffmpeg.writeFile('frame2.png', await fetchFile('/images/frame2.png'));
+
+          // Frame as base, two video instances as overlays
+          // Frame 2 Final Symmetrical Coordinates
+          const margin = 35;     // Wider margins to prevent logo cutting
+          const v1Y = 316;       // Top video box start (Logo ends at ~314)
+          const videoH = 692;    // Symmetrical height for both boxes
+          const redBarH = 206;   // Middle red bar space
+          const v2Y = v1Y + videoH + redBarH; // Bottom video starts at 1214
+
+          const boxW = 1010;     // 1080 - 35*2
+          const boxH = 692;
+
+
+
+
+          // Build V1 filter chain (EQ + Scale/Crop with Zoom)
+          let v1Ops = [];
+          if (videoCroppedAreaPixels) {
+            let vx = Math.round(videoCroppedAreaPixels.x);
+            let vy = Math.round(videoCroppedAreaPixels.y);
+            let vw = Math.round(videoCroppedAreaPixels.width);
+            let vh = Math.round(videoCroppedAreaPixels.height);
+            if (vw % 2 !== 0) vw -= 1;
+            if (vh % 2 !== 0) vh -= 1;
+            v1Ops.push(`crop=${vw}:${vh}:${vx}:${vy}`);
+          }
+          if (brightness !== 1 || contrast !== 1 || saturation !== 1) {
+            v1Ops.push(`eq=brightness=${brightness - 1}:contrast=${contrast}:saturation=${saturation}`);
+          }
+          // Zoom to fill box
+          const v1ZoomX = Math.max(1, videoZoom);
+          v1Ops.push(`scale=${Math.round(boxW * v1ZoomX)}:${Math.round(boxH * v1ZoomX)}:force_original_aspect_ratio=increase,crop=${boxW}:${boxH}`);
+          const v1Scale = v1Ops.join(',');
+
+
+
+          // Build V2 filter chain (EQ + Scale/Crop with Zoom)
+          let v2Ops = [];
+          if (v2VideoCroppedAreaPixels) {
+            let vx = Math.round(v2VideoCroppedAreaPixels.x);
+            let vy = Math.round(v2VideoCroppedAreaPixels.y);
+            let vw = Math.round(v2VideoCroppedAreaPixels.width);
+            let vh = Math.round(v2VideoCroppedAreaPixels.height);
+            if (vw % 2 !== 0) vw -= 1;
+            if (vh % 2 !== 0) vh -= 1;
+            v2Ops.push(`crop=${vw}:${vh}:${vx}:${vy}`);
+          }
+          if (v2Brightness !== 1 || v2Contrast !== 1 || v2Saturation !== 1) {
+            v2Ops.push(`eq=brightness=${v2Brightness - 1}:contrast=${v2Contrast}:saturation=${v2Saturation}`);
+          }
+          const v2ZoomX = Math.max(1, v2VideoZoom);
+          v2Ops.push(`scale=${Math.round(boxW * v2ZoomX)}:${Math.round(boxH * v2ZoomX)}:force_original_aspect_ratio=increase,crop=${boxW}:${boxH}`);
+          const v2Scale = v2Ops.join(',');
+
+
+
+
+
+
+          let cmdFrame = ['-i', outName, '-i', 'frame2.png'];
+          let frameFilter = `[1:v]scale=1080:1920[fbase];`;
+          frameFilter += `[0:v]${v1Scale}[vtop];`;
+
+          if (video2Written) {
+            cmdFrame.push('-i', 'input2.mp4');
+            frameFilter += `[2:v]${v2Scale}[vbottom];`;
+            // Frame is base, videos go on top (with Room for Logo)
+            frameFilter += `[fbase][vtop]overlay=${margin}:${v1Y}[v1];`;
+            frameFilter += `[v1][vbottom]overlay=${margin}:${v2Y}[vframe]`;
+          } else {
+            frameFilter += `[0:v]${v2Scale}[vbottom];`;
+            frameFilter += `[fbase][vtop]overlay=${margin}:${v1Y}[v1];`;
+            frameFilter += `[v1][vbottom]overlay=${margin}:${v2Y}[vframe]`;
+          }
+
+
+
+          let lastFrameStream = 'vframe';
+          let nextFrameIdx = video2Written ? 3 : 2;
+
+          if (logoWritten) {
+            cmdFrame.push('-i', 'logo.png');
+            const targetWidth = 1080 * (logoSize / 100);
+            let w = Math.round(targetWidth);
+            if (w % 2 !== 0) w += 1;
+            const opacityVal = logoOpacity / 100;
+            frameFilter += `;[${nextFrameIdx}:v]format=rgba,colorchannelmixer=aa=${opacityVal},scale=${w}:-1[logo];[${lastFrameStream}][logo]overlay=x=(W*${logoPos.x}/100-w/2):y=(H*${logoPos.y}/100-h/2)[vlogo]`;
+            lastFrameStream = 'vlogo';
+            nextFrameIdx++;
+          }
+          if (text) {
+            cmdFrame.push('-i', 'text_overlay.png');
+            frameFilter += `;[${lastFrameStream}][${nextFrameIdx}:v]overlay=0:0[vtext]`;
+            lastFrameStream = 'vtext';
+            nextFrameIdx++;
+          }
+
+          cmdFrame.push(
+            '-filter_complex', frameFilter,
+            '-map', `[${lastFrameStream}]`,
+            '-map', '0:a?',
+
+
+
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '28',
+            '-pix_fmt', 'yuv420p',
+            '-r', '30',
+            '-c:a', 'aac',
+            'export_double.mp4'
+          );
+
+          returnCode = await ffmpeg.exec(cmdFrame);
+          if (returnCode !== 0) throw new Error('Double Frame overlay failed.');
+          finalOutName = 'export_double.mp4';
+        } catch (overlayErr) {
+          console.error("Double Frame overlay error:", overlayErr);
+        }
       }
+
       // Handle normal export formats if frame is not used
       else {
+
         if (exportFormat === 'reel') {
-          const scaleCrop = 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920';
+          const scaleCrop = `scale=${Math.round(1080 * videoZoom)}:${Math.round(1920 * videoZoom)}:force_original_aspect_ratio=increase,crop=1080:1920`;
+
+
           returnCode = await ffmpeg.exec(['-i', outName, '-vf', scaleCrop, '-map', '0:v', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-r', '30', '-c:a', 'aac', 'export_reel.mp4']);
           if (returnCode !== 0) throw new Error('Reel export failed.');
           finalOutName = 'export_reel.mp4';
@@ -975,56 +1194,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         }
       }
 
-      // Always append outerframe.mp4 at the end of the video IF IT HASN'T BEEN APPENDED ALREADY
-      const alreadyHasOutro = file.name.includes('_with_outro');
-      if (!alreadyHasOutro) {
-        try {
-          setProgress(95);
-          await ffmpeg.writeFile('outerframe.mp4', await fetchFile('/images/outerframe.mp4'));
+      // Finalizing export...
+      setProgress(100);
 
-          let targetW = 1280; let targetH = 720;
-          if (exportFormat === 'reel') { targetW = 1080; targetH = 1920; }
-          else if (exportFormat === 'youtube') { targetW = 1920; targetH = 1080; }
-          else if (exportFormat === 'original') {
-            targetW = videoDimensions.width || 1280; targetH = videoDimensions.height || 720;
-            if (targetW % 2 !== 0) targetW += 1; if (targetH % 2 !== 0) targetH += 1;
-          }
-
-          const scalePad = `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30`;
-
-          // First attempt: concatenate with audio
-          let concatRes = await ffmpeg.exec([
-            '-i', finalOutName,
-            '-i', 'outerframe.mp4',
-            '-filter_complex', `[0:v]${scalePad}[v0]; [1:v]${scalePad}[v1]; [v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]`,
-            '-map', '[v]', '-map', '[a]',
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac',
-            'final_with_outro.mp4'
-          ]);
-
-          if (concatRes !== 0) {
-            console.log("Audio concat failed, trying video-only concat fallback...");
-            // Fallback: concatenate video only (if either video lies missing audio)
-            concatRes = await ffmpeg.exec([
-              '-i', finalOutName,
-              '-i', 'outerframe.mp4',
-              '-filter_complex', `[0:v]${scalePad}[v0]; [1:v]${scalePad}[v1]; [v0][v1]concat=n=2:v=1:a=0[v]`,
-              '-map', '[v]',
-              '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
-              'final_with_outro.mp4'
-            ]);
-          }
-
-          if (concatRes === 0) {
-            finalOutName = 'final_with_outro.mp4';
-          } else {
-            console.warn("Outerframe append failed, using base file.");
-          }
-        } catch (e) {
-          console.error("Failure while appending outer frame:", e);
-        }
-      }
 
       const data = await ffmpeg.readFile(finalOutName);
       const blob = new Blob([data.buffer], { type: 'video/mp4' });
@@ -1053,7 +1225,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
     if (trimEnd === 0 || trimEnd > d) {
       setTrimEnd(d);
     }
+    if (v2TrimEnd === 0 || v2TrimEnd > d) {
+      setV2TrimEnd(d);
+    }
   };
+
 
   // Trim timeline: get time from mouse X
   const trimTimelineTimeFromClientX = useCallback((clientX) => {
@@ -1283,6 +1459,28 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
 
     <div className="flex flex-col md:flex-row h-full w-full bg-gray-900 text-white min-h-0 font-sans">
+      {/* Hidden Global Inputs for Labels - MUST BE OUTSIDE CONDITIONAL BLOCKS */}
+      <input
+        type="file"
+        accept="audio/*"
+        onChange={(e) => setAudioFile(e.target.files[0])}
+        className="hidden"
+        id="audio-upload-global"
+      />
+      <input
+        type="file"
+        accept="video/*"
+        onChange={(e) => {
+          const file = e.target.files[0];
+          if (file) {
+            setVideo2File(file);
+            setVideo2Src(URL.createObjectURL(file));
+          }
+        }}
+        className="hidden"
+        id="video2-upload-global"
+      />
+
       {/* Main Preview Area - 45% height on mobile, flex-1 on desktop */}
       <div className="w-full md:flex-1 h-[45%] md:h-full bg-black relative flex flex-col items-center justify-center overflow-hidden order-1 md:order-2 min-h-0 p-4">
         {loadError ? (
@@ -1338,14 +1536,24 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       onClick={focusVideoCropper}
                       onKeyDown={(e) => { if (e.target === e.currentTarget) focusVideoCropper(); }}
                     >
+
+
                       <Cropper
                         image={cropPreviewSrc}
-                        crop={videoCrop}
-                        zoom={videoZoom}
-                        aspect={videoCropAspect === 'free' ? (videoDimensions.width && videoDimensions.height ? videoDimensions.width / videoDimensions.height : 16 / 9) : videoCropAspect === '1:1' ? 1 : videoCropAspect === '9:16' ? 9 / 16 : 16 / 9}
-                        onCropChange={setVideoCrop}
+
+                        crop={editingVideo === 'v1' ? videoCrop : v2VideoCrop}
+                        zoom={editingVideo === 'v1' ? videoZoom : v2VideoZoom}
+                        aspect={
+                          videoCropAspect === 'double' ? 1010 / 692 :
+
+                            videoCropAspect === 'free' ? (videoDimensions.width && videoDimensions.height ? videoDimensions.width / videoDimensions.height : 16 / 9) :
+                              videoCropAspect === '1:1' ? 1 :
+                                videoCropAspect === '9:16' ? 9 / 16 : 16 / 9
+                        }
+
+                        onCropChange={editingVideo === 'v1' ? setVideoCrop : setV2VideoCrop}
                         onCropComplete={onVideoCropAreaChange}
-                        onZoomChange={setVideoZoom}
+                        onZoomChange={editingVideo === 'v1' ? setVideoZoom : setV2VideoZoom}
                         minZoom={VIDEO_CROP_MIN_ZOOM}
                         maxZoom={VIDEO_CROP_MAX_ZOOM}
                         objectFit="contain"
@@ -1359,7 +1567,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 ) : null}
                 <div
                   ref={containerRef}
-                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full max-h-[600px] ${useReelFrame ? 'bg-transparent h-full w-auto aspect-[9/16]' : 'bg-black w-full'}`}
+                  className={`relative shadow-2xl rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center max-w-full max-h-[600px] ${useReelFrame || useDoubleFrame || exportFormat === 'reel' ? 'bg-transparent h-full w-auto aspect-[9/16]' : 'bg-black w-full'}`}
                   style={{
                     display: activeTab === 'crop' ? 'none' : 'flex'
                   }}
@@ -1368,7 +1576,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     ref={playerRef}
                     key={videoSrc}
                     src={videoSrc}
-                    className={useReelFrame ? "absolute object-cover bg-black" : "max-h-[600px] w-auto h-auto object-contain"}
+                    className={useReelFrame || useDoubleFrame || exportFormat === 'reel' ? "absolute object-cover bg-black" : "max-h-[600px] w-auto h-auto object-contain"}
                     controls={false}
                     playsInline
                     preload="auto"
@@ -1386,16 +1594,103 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       if (excludedSegments.size > 0) {
                         skipExcludedSegments(currentTime);
                       }
+                      // Sync second player if it exists
+                      if (useDoubleFrame && secondPlayerRef.current) {
+                        if (Math.abs(secondPlayerRef.current.currentTime - currentTime) > 0.1) {
+                          secondPlayerRef.current.currentTime = currentTime;
+                        }
+                      }
                     }}
+
                     onEnded={() => setIsPlaying(false)}
                     onError={(e) => console.error("Video Tag Error:", e)}
-                    style={useReelFrame ? {
-                      left: '2.315%', top: '37.396%', width: '94.167%', height: '61.094%',
-                      filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`
+                    style={useReelFrame || useDoubleFrame || exportFormat === 'reel' ? {
+                      left: useReelFrame ? '2.315%' : (useDoubleFrame ? '3.241%' : '0'),
+                      top: useReelFrame ? '37.396%' : (useDoubleFrame ? '16.458%' : '0'),
+                      width: useReelFrame ? '94.167%' : (useDoubleFrame ? '93.518%' : '100%'),
+                      height: useReelFrame ? '61.094%' : (useDoubleFrame ? '36.042%' : '100%'),
+
+
+
+
+
+                      filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`,
+                      transform: `scale(${videoZoom})`,
+                      objectPosition: videoCroppedAreaPixels ?
+                        `${(videoCroppedAreaPixels.x / (videoDimensions.width - videoCroppedAreaPixels.width)) * 100}% ${(videoCroppedAreaPixels.y / (videoDimensions.height - videoCroppedAreaPixels.height)) * 100}%` : '50% 50%',
+                      zIndex: 10
                     } : {
-                      filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`
+                      filter: `brightness(${brightness}) contrast(${contrast}) saturate(${saturation})`,
+                      zIndex: 10
                     }}
+
+
                   />
+                  {useDoubleFrame && editingVideo === 'v1' && (
+
+                    <div
+                      className="absolute z-50 w-6 h-6 bg-red-600 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-lg"
+                      style={{ left: '97.5%', top: '51.5%' }}
+
+                      onMouseDown={(e) => handleResizeStart(e, 'video1')}
+                      onTouchStart={(e) => handleResizeStart(e, 'video1')}
+                    >
+                      <Maximize size={12} className="text-white" />
+                    </div>
+                  )}
+                  {useDoubleFrame && (
+
+                    <video
+                      ref={secondPlayerRef}
+                      key={`${video2Src}-bottom`}
+                      src={video2Src}
+                      className="absolute object-cover bg-black"
+                      muted
+                      playsInline
+                      preload="auto"
+                      onLoadedMetadata={(e) => {
+                        e.target.currentTime = playerRef.current?.currentTime || 0;
+                      }}
+                      style={{
+                        left: '3.241%',
+                        top: '63.229%',
+                        width: '93.518%',
+                        height: '36.042%',
+
+
+
+
+
+
+                        filter: `brightness(${v2Brightness}) contrast(${v2Contrast}) saturate(${v2Saturation})`,
+                        transform: `scale(${v2VideoZoom})`,
+                        objectPosition: v2VideoCroppedAreaPixels ?
+                          `${(v2VideoCroppedAreaPixels.x / (videoDimensions.width - v2VideoCroppedAreaPixels.width)) * 100}% ${(v2VideoCroppedAreaPixels.y / (videoDimensions.height - v2VideoCroppedAreaPixels.height)) * 100}%` : '50% 50%',
+                        zIndex: 10
+                      }}
+
+
+
+
+
+
+
+                    />
+                  )}
+
+                  {useDoubleFrame && editingVideo === 'v2' && (
+
+                    <div
+                      className="absolute z-50 w-6 h-6 bg-red-600 rounded-full border-2 border-white cursor-se-resize flex items-center justify-center shadow-lg"
+                      style={{ left: '97.5%', top: '99%' }}
+
+                      onMouseDown={(e) => handleResizeStart(e, 'video2')}
+                      onTouchStart={(e) => handleResizeStart(e, 'video2')}
+                    >
+                      <Maximize size={12} className="text-white" />
+                    </div>
+                  )}
+
 
                   {useReelFrame && (
                     <img
@@ -1405,20 +1700,39 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     />
                   )}
 
+                  {useDoubleFrame && (
+                    <img
+                      src="/images/frame2.png"
+                      alt="Double Frame Overlay"
+                      className="absolute inset-0 z-30 w-full h-full object-fill pointer-events-none"
+                      style={{ zIndex: 30 }}
+                    />
+                  )}
+
+
+
+
+
                   {/* Overlay Text Preview */}
                   {text && (
                     <div
-                      className="absolute z-20 select-none pointer-events-none"
+                      className="absolute z-50 select-none pointer-events-auto"
                       style={{
+
+
                         left: `${textPos.x}%`,
                         top: `${textPos.y}%`,
                         transform: 'translate(-50%, -50%)',
                         width: 'max-content',
-                        maxWidth: '98%',
+                        maxWidth: '92%',
                       }}
+
+
+
                     >
                       <div
-                        className="font-bold drop-shadow-lg leading-tight mx-auto block relative whitespace-pre-wrap pointer-events-auto w-full"
+                        className="font-bold drop-shadow-lg leading-tight mx-auto block relative whitespace-pre-wrap w-full"
+
                         style={{
                           color: textColor,
                           textAlign: textAlign,
@@ -1447,8 +1761,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                   )}
                   {logoPreview && (
                     <div
-                      className="absolute z-20 select-none"
+                      className="absolute z-50 select-none pointer-events-auto"
+
                       style={{
+
                         left: `${logoPos.x}%`,
                         top: `${logoPos.y}%`,
                         width: `${logoSize}%`,
@@ -1532,6 +1848,32 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         </div>
 
 
+        {/* Video Selector for Double Frame */}
+        {useDoubleFrame && (
+          <div className="flex border-b border-gray-700 bg-gray-900 shrink-0">
+            <button
+              onClick={() => setEditingVideo('v1')}
+              className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all border-r border-gray-700 flex items-center justify-center gap-2 ${editingVideo === 'v1' ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <Video size={14} /> Video 1 (Top)
+            </button>
+            <button
+              onClick={() => setEditingVideo('v2')}
+              className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${editingVideo === 'v2' ? 'text-red-500 bg-red-500/10' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              <Video size={14} /> Video 2 {video2File ? "" : "(Bottom)"}
+            </button>
+            {!video2File && editingVideo === 'v2' && (
+              <label htmlFor="video2-upload-global" className="px-3 bg-red-600 text-white flex items-center justify-center text-[10px] font-black cursor-pointer animate-pulse hover:bg-red-700 transition-colors uppercase z-50">
+                Upload V2
+              </label>
+            )}
+
+          </div>
+
+        )}
+
+
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8 min-h-0">
           {activeTab === 'trim' && (
@@ -1587,25 +1929,26 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       {/* Dimmed: before start */}
                       <div
                         className="absolute top-0 bottom-0 left-0 bg-gray-800/80"
-                        style={{ width: `${duration ? (trimStart / duration) * 100 : 0}%` }}
+                        style={{ width: `${duration ? ((editingVideo === 'v1' ? trimStart : v2TrimStart) / duration) * 100 : 0}%` }}
                       />
                       {/* Kept: between start and end */}
                       <div
                         className="absolute top-0 bottom-0 bg-green-600/40 border-x border-green-500/50"
                         style={{
-                          left: `${duration ? (trimStart / duration) * 100 : 0}%`,
-                          width: `${duration ? ((trimEnd - trimStart) / duration) * 100 : 100}%`,
+                          left: `${duration ? ((editingVideo === 'v1' ? trimStart : v2TrimStart) / duration) * 100 : 0}%`,
+                          width: `${duration ? (((editingVideo === 'v1' ? trimEnd : v2TrimEnd) - (editingVideo === 'v1' ? trimStart : v2TrimStart)) / duration) * 100 : 100}%`,
                         }}
                       />
                       {/* Dimmed: after end */}
                       <div
                         className="absolute top-0 bottom-0 right-0 bg-gray-800/80"
-                        style={{ width: `${duration ? ((duration - trimEnd) / duration) * 100 : 0}%` }}
+                        style={{ width: `${duration ? ((duration - (editingVideo === 'v1' ? trimEnd : v2TrimEnd)) / duration) * 100 : 0}%` }}
                       />
+
                       {/* Start handle */}
                       <div
                         className="absolute top-0 bottom-0 w-3 -ml-1.5 z-10 flex items-center cursor-ew-resize group"
-                        style={{ left: `${duration ? (trimStart / duration) * 100 : 0}%` }}
+                        style={{ left: `${duration ? ((editingVideo === 'v1' ? trimStart : v2TrimStart) / duration) * 100 : 0}%` }}
                         onMouseDown={(e) => { e.stopPropagation(); setTrimDragging('start'); }}
                         title="Start — drag"
                       >
@@ -1614,44 +1957,54 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       {/* End handle */}
                       <div
                         className="absolute top-0 bottom-0 w-3 -ml-1.5 z-10 flex items-center justify-end cursor-ew-resize group"
-                        style={{ left: `${duration ? (trimEnd / duration) * 100 : 100}%` }}
+                        style={{ left: `${duration ? ((editingVideo === 'v1' ? trimEnd : v2TrimEnd) / duration) * 100 : 100}%` }}
                         onMouseDown={(e) => { e.stopPropagation(); setTrimDragging('end'); }}
                         title="End — drag"
                       >
                         <span className="w-1 h-full bg-green-500 group-hover:bg-green-400 rounded-full" />
                       </div>
+
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Start <span>{formatTime(trimStart)} ({trimStart.toFixed(1)}s)</span></label>
+                    <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Start <span>{formatTime(editingVideo === 'v1' ? trimStart : v2TrimStart)} ({(editingVideo === 'v1' ? trimStart : v2TrimStart).toFixed(1)}s)</span></label>
                     <input
                       type="range" min="0" max={duration} step="0.1"
-                      value={trimStart}
+                      value={editingVideo === 'v1' ? trimStart : v2TrimStart}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        if (val < trimEnd) {
-                          setTrimStart(val);
-                          if (playerRef.current) playerRef.current.currentTime = val;
+                        if (val < (editingVideo === 'v1' ? trimEnd : v2TrimEnd)) {
+                          if (editingVideo === 'v1') {
+                            setTrimStart(val);
+                            if (playerRef.current) playerRef.current.currentTime = val;
+                          } else {
+                            setV2TrimStart(val);
+                            if (secondPlayerRef.current) secondPlayerRef.current.currentTime = val;
+                          }
                         }
                       }}
                       className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-red-500"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">End <span>{formatTime(trimEnd)} ({trimEnd.toFixed(1)}s)</span></label>
+                    <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">End <span>{formatTime(editingVideo === 'v1' ? trimEnd : v2TrimEnd)} ({(editingVideo === 'v1' ? trimEnd : v2TrimEnd).toFixed(1)}s)</span></label>
                     <input
                       type="range" min="0" max={duration} step="0.1"
-                      value={trimEnd}
+                      value={editingVideo === 'v1' ? trimEnd : v2TrimEnd}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        if (val > trimStart) setTrimEnd(val);
+                        if (val > (editingVideo === 'v1' ? trimStart : v2TrimStart)) {
+                          if (editingVideo === 'v1') setTrimEnd(val);
+                          else setV2TrimEnd(val);
+                        }
                       }}
                       className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-red-500"
                     />
                   </div>
                   <div className="p-4 bg-gray-700/50 rounded-lg border border-gray-600 text-center">
-                    <p className="text-sm text-gray-300">Keep: <span className="font-bold text-white">{formatTime(trimStart)} – {formatTime(trimEnd)}</span> ({(trimEnd - trimStart).toFixed(1)}s)</p>
+                    <p className="text-sm text-gray-300">Keep: <span className="font-bold text-white">{formatTime(editingVideo === 'v1' ? trimStart : v2TrimStart)} – {formatTime(editingVideo === 'v1' ? trimEnd : v2TrimEnd)}</span> ({((editingVideo === 'v1' ? trimEnd : v2TrimEnd) - (editingVideo === 'v1' ? trimStart : v2TrimStart)).toFixed(1)}s)</p>
                   </div>
+
                 </>
               )}
             </div>
@@ -1687,36 +2040,37 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                 </p>
               </div>
               {videoCropMode === 'moveZoom' && (
-                <>
-                  <p className="text-[10px] text-amber-400/90 bg-amber-500/10 px-2 py-1.5 rounded">Arrow se move: pehle <strong>preview par ek click</strong> karein, phir arrow keys dabayein.</p>
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Zoom {videoZoom.toFixed(1)}x</label>
+                <div className="space-y-4">
+                  <p className="text-[10px] text-amber-400/90 bg-amber-500/10 px-2 py-1.5 rounded">Video par <strong>drag</strong> karke position karein. Red handles se bhi zoom kar sakte hain.</p>
+
+                  {/* Video 1 Zoom */}
+                  <div className="space-y-2 p-2 bg-gray-900/40 rounded-lg border border-gray-700">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase flex justify-between">Video 1 (Top) Zoom <span>{videoZoom.toFixed(2)}x</span></label>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setVideoZoom(z => Math.max(VIDEO_CROP_MIN_ZOOM, z - 0.25))}
-                        className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-                      >
-                        <X size={16} className="rotate-45" />
-                      </button>
                       <input
-                        type="range"
-                        min={VIDEO_CROP_MIN_ZOOM}
-                        max={VIDEO_CROP_MAX_ZOOM}
-                        step={0.1}
+                        type="range" min="1" max="5" step="0.05"
                         value={videoZoom}
                         onChange={(e) => setVideoZoom(parseFloat(e.target.value))}
                         className="flex-1 h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setVideoZoom(z => Math.min(VIDEO_CROP_MAX_ZOOM, z + 0.25))}
-                        className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-                      >
-                        <Maximize size={16} />
-                      </button>
                     </div>
                   </div>
+
+                  {/* Video 2 Zoom - only if Double Frame */}
+                  {useDoubleFrame && (
+                    <div className="space-y-2 p-2 bg-gray-900/40 rounded-lg border border-gray-700">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase flex justify-between">Video 2 (Bottom) Zoom <span>{v2VideoZoom.toFixed(2)}x</span></label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range" min="1" max="5" step="0.05"
+                          value={v2VideoZoom}
+                          onChange={(e) => setV2VideoZoom(parseFloat(e.target.value))}
+                          className="flex-1 h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-400 uppercase">Crop aspect</label>
                     <div className="flex flex-wrap gap-2">
@@ -1724,7 +2078,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         { value: 'free', label: 'Free' },
                         { value: '1:1', label: '1:1' },
                         { value: '9:16', label: '9:16' },
-                        { value: '16:9', label: '16:9' }
+                        { value: '16:9', label: '16:9' },
+                        ...(useDoubleFrame ? [{ value: 'double', label: 'Double Frame (Fit)' }] : [])
                       ].map((opt) => (
                         <button
                           key={opt.value}
@@ -1737,8 +2092,9 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                       ))}
                     </div>
                   </div>
-                </>
+                </div>
               )}
+
             </div>
           )}
 
@@ -1746,16 +2102,17 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             <div className="space-y-6">
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Brightness</label>
-                <input type="range" min="0" max="2" step="0.1" value={brightness} onChange={(e) => setBrightness(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
+                <input type="range" min="0" max="2" step="0.1" value={editingVideo === 'v1' ? brightness : v2Brightness} onChange={(e) => (editingVideo === 'v1' ? setBrightness : setV2Brightness)(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Contrast</label>
-                <input type="range" min="0" max="2" step="0.1" value={contrast} onChange={(e) => setContrast(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
+                <input type="range" min="0" max="2" step="0.1" value={editingVideo === 'v1' ? contrast : v2Contrast} onChange={(e) => (editingVideo === 'v1' ? setContrast : setV2Contrast)(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-gray-400 uppercase flex justify-between">Saturation</label>
-                <input type="range" min="0" max="2" step="0.1" value={saturation} onChange={(e) => setSaturation(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
+                <input type="range" min="0" max="2" step="0.1" value={editingVideo === 'v1' ? saturation : v2Saturation} onChange={(e) => (editingVideo === 'v1' ? setSaturation : setV2Saturation)(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
               </div>
+
             </div>
           )}
 
@@ -2221,9 +2578,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     className="hidden"
                     id="audio-upload"
                   />
-                  <label htmlFor="audio-upload" className="flex-1 py-3 px-4 border-2 border-dashed border-gray-600 rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:border-red-500 hover:text-red-400 transition-colors">
+                  <label htmlFor="audio-upload-global" className="flex-1 py-3 px-4 border-2 border-dashed border-gray-600 rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:border-red-500 hover:text-red-400 transition-colors">
                     <Music size={18} /> {audioFile ? audioFile.name : "Select or Drop MP3"}
                   </label>
+
                   {audioFile && (
                     <button onClick={() => setAudioFile(null)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20">
                       <X size={18} />
@@ -2231,22 +2589,62 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                   )}
                 </div>
               </div>
-              {audioFile && (
-                <>
+
+              <div className="space-y-4 pt-4 border-t border-gray-700">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-gray-400 uppercase">Double Frame: Video 2 (Bottom)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          setVideo2File(file);
+                          setVideo2Src(URL.createObjectURL(file));
+                        }
+                      }}
+                      className="hidden"
+                      id="video2-upload"
+                    />
+                    <label htmlFor="video2-upload-global" className="flex-1 py-3 px-4 border-2 border-dashed border-gray-600 rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:border-red-500 hover:text-red-400 transition-colors">
+                      <Video size={18} /> {video2File ? video2File.name : "Select second video"}
+                    </label>
+
+                    {video2File && (
+                      <button onClick={() => { setVideo2File(null); setVideo2Src(null); }} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20">
+                        <X size={18} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-400 uppercase flex items-center gap-2">
-                      <Volume2 size={14} /> Video Volume {(videoVolume * 100).toFixed(0)}%
+                      <Volume2 size={14} /> {useDoubleFrame ? "Video 1 (Top) Volume" : "Video Volume"} {(video1Volume * 100).toFixed(0)}%
                     </label>
-                    <input type="range" min="0" max="1" step="0.1" value={videoVolume} onChange={(e) => setVideoVolume(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
+                    <input type="range" min="0" max="2" step="0.1" value={video1Volume} onChange={(e) => setVideo1Volume(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
                   </div>
+
+                  {useDoubleFrame && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-gray-400 uppercase flex items-center gap-2">
+                        <Volume2 size={14} /> Video 2 (Bottom) Volume {(video2Volume * 100).toFixed(0)}%
+                      </label>
+                      <input type="range" min="0" max="2" step="0.1" value={video2Volume} onChange={(e) => setVideo2Volume(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-400 uppercase flex items-center gap-2">
                       <Music size={14} /> Music Volume {(audioVolume * 100).toFixed(0)}%
                     </label>
-                    <input type="range" min="0" max="1" step="0.1" value={audioVolume} onChange={(e) => setAudioVolume(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
+                    <input type="range" min="0" max="2" step="0.1" value={audioVolume} onChange={(e) => setAudioVolume(parseFloat(e.target.value))} className="w-full h-1 bg-gray-600 rounded-lg cursor-pointer accent-red-500" />
                   </div>
-                </>
-              )}
+                </div>
+              </div>
+
             </div>
           )}
         </div>
@@ -2290,13 +2688,63 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     checked={useReelFrame}
                     onChange={e => {
                       setUseReelFrame(e.target.checked);
-                      if (e.target.checked) setExportFormat('reel'); // Auto-select reel format when using frame
+                      if (e.target.checked) {
+                        setUseDoubleFrame(false);
+                        setExportFormat('reel'); // Auto-select reel format when using frame
+                      }
                     }}
+
                     className="accent-red-500"
                   />
                   Apply <span className="font-bold text-red-400">Pune Lok Frame</span>
                 </label>
+                <label className="text-xs flex items-center gap-2 cursor-pointer bg-blue-600/20 px-3 py-1.5 rounded-lg border border-blue-500/50 hover:bg-blue-600/30 transition-colors text-white">
+                  <input
+                    type="checkbox"
+                    checked={useDoubleFrame}
+                    onChange={e => {
+                      setUseDoubleFrame(e.target.checked);
+                      if (e.target.checked) {
+                        setUseReelFrame(false);
+                        setExportFormat('reel');
+                      }
+                    }}
+                    className="accent-blue-500"
+                  />
+                  Apply <span className="font-bold text-blue-400">Double Frame</span>
+                </label>
+
+                {(useReelFrame || useDoubleFrame || exportFormat === 'reel') && (
+                  <div className="flex items-center gap-2 bg-gray-700/50 px-3 py-1.5 rounded-lg border border-gray-600 ml-2">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Zoom</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="4"
+                      step="0.05"
+                      value={useDoubleFrame ? (editingVideo === 'v1' ? videoZoom : v2VideoZoom) : videoZoom}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (useDoubleFrame) {
+                          if (editingVideo === 'v1') setVideoZoom(val);
+                          else setV2VideoZoom(val);
+                        } else {
+                          setVideoZoom(val);
+                          setReelZoom(val); // Keep for compatibility if needed
+                        }
+                      }}
+                      className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-red-500"
+                    />
+                    <span className="text-[10px] text-white font-mono w-8">
+                      {(useDoubleFrame ? (editingVideo === 'v1' ? videoZoom : v2VideoZoom) : videoZoom).toFixed(2)}x
+                    </span>
+
+                  </div>
+                )}
+
               </div>
+
+
               <div className="flex gap-3">
                 <button onClick={onCancel} className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-xl transition-colors">
                   Cancel
