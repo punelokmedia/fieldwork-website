@@ -1057,15 +1057,16 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           await ffmpeg.writeFile('frame2.png', await fetchFile('/images/frame2.png'));
 
           // Frame as base, two video instances as overlays
-          // Frame 2 Final Symmetrical Coordinates
-          const margin = 35;     // Wider margins to prevent logo cutting
-          const v1Y = 316;       // Top video box start (Logo ends at ~314)
-          const videoH = 692;    // Symmetrical height for both boxes
-          const redBarH = 206;   // Middle red bar space
-          const v2Y = v1Y + videoH + redBarH; // Bottom video starts at 1214
+          // Frame 2 Final Precise Coordinates
+          const margin = 27;     // Exactly 2.5% of 1080
+          const v1Y = 294;       // Tight fit below logo (15.31%)
+          const videoH = 710;    // Full hole height (36.97%)
+          const redBarH = 194;   // Exact middle bar space
+          const v2Y = v1Y + videoH + redBarH; // Bottom video starts at 1198 (62.39%)
 
-          const boxW = 1010;     // 1080 - 35*2
-          const boxH = 692;
+          const boxW = 1026;     // 1080 - 27*2
+          const boxH = 710;
+
 
 
 
@@ -1544,7 +1545,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         crop={editingVideo === 'v1' ? videoCrop : v2VideoCrop}
                         zoom={editingVideo === 'v1' ? videoZoom : v2VideoZoom}
                         aspect={
-                          videoCropAspect === 'double' ? 1010 / 692 :
+                          videoCropAspect === 'double' ? 1026 / 710 :
 
                             videoCropAspect === 'free' ? (videoDimensions.width && videoDimensions.height ? videoDimensions.width / videoDimensions.height : 16 / 9) :
                               videoCropAspect === '1:1' ? 1 :
@@ -1605,10 +1606,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                     onEnded={() => setIsPlaying(false)}
                     onError={(e) => console.error("Video Tag Error:", e)}
                     style={useReelFrame || useDoubleFrame || exportFormat === 'reel' ? {
-                      left: useReelFrame ? '2.315%' : (useDoubleFrame ? '3.241%' : '0'),
-                      top: useReelFrame ? '37.396%' : (useDoubleFrame ? '16.458%' : '0'),
-                      width: useReelFrame ? '94.167%' : (useDoubleFrame ? '93.518%' : '100%'),
-                      height: useReelFrame ? '61.094%' : (useDoubleFrame ? '36.042%' : '100%'),
+                      left: useReelFrame ? '2.315%' : (useDoubleFrame ? '2.5%' : '0'),
+                      top: useReelFrame ? '37.396%' : (useDoubleFrame ? '15.312%' : '0'),
+                      width: useReelFrame ? '94.167%' : (useDoubleFrame ? '95%' : '100%'),
+                      height: useReelFrame ? '61.094%' : (useDoubleFrame ? '36.979%' : '100%'),
+
 
 
 
@@ -1652,10 +1654,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                         e.target.currentTime = playerRef.current?.currentTime || 0;
                       }}
                       style={{
-                        left: '3.241%',
-                        top: '63.229%',
-                        width: '93.518%',
-                        height: '36.042%',
+                        left: '2.5%',
+                        top: '62.395%',
+                        width: '95%',
+                        height: '36.979%',
+
 
 
 
