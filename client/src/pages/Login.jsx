@@ -18,13 +18,18 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const success = await login(email, password);
+
+    // Trim email to avoid accidental spaces
+    const trimmedEmail = email.trim();
+
+    const result = await login(trimmedEmail, password);
     setLoading(false);
-    if (success) {
+
+    if (result.success) {
       toast.success('Login successful');
       navigate('/dashboard');
     } else {
-      setError('Invalid email or password');
+      setError(result.error || 'Invalid email or password');
     }
   };
 

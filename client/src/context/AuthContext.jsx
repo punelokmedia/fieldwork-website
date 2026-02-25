@@ -43,10 +43,11 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', res.data.token);
       setToken(res.data.token);
       setUser(res.data.user);
-      return true;
+      return { success: true };
     } catch (err) {
-      console.error("Login Error:", err.response?.data || err.message);
-      return false;
+      const errorMsg = err.response?.data?.errors?.[0]?.msg || err.response?.data?.msg || err.message;
+      console.error("Login Error:", errorMsg);
+      return { success: false, error: errorMsg };
     }
   };
 
