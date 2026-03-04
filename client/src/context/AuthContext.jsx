@@ -12,12 +12,15 @@ export const AuthProvider = ({ children }) => {
   const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
   useEffect(() => {
-    // Set default axios header
-    if (token) {
-      axios.defaults.headers.common['x-auth-token'] = token;
-    } else {
-      delete axios.defaults.headers.common['x-auth-token'];
-    }
+    // Set up axios interceptor for API requests only
+    const interceptor = axios.interceptors.request.use(config => {
+      // Only add token if it's our API and we have a token
+      const isApiRequest = config.url.includes(API_URL) || !config.url.startsWith('http');
+      if (token && isApiRequest) {
+        config.headers['x-auth-token'] = token;
+      }
+      return config;
+    }, error => Promise.reject(error));
 
     const loadUser = async () => {
       if (token) {
@@ -29,12 +32,13 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem('token');
           setToken(null);
           setUser(null);
-          delete axios.defaults.headers.common['x-auth-token'];
         }
       }
       setLoading(false);
     };
     loadUser();
+
+    return () => axios.interceptors.request.eject(interceptor);
   }, [token, API_URL]);
 
   const login = async (email, password) => {

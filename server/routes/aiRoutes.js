@@ -3,7 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const OpenAI = require('openai');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const cloudinary = require('cloudinary').v2;
+const { cloudinary } = require('../config/cloudinary');
 const axios = require('axios');
 
 // Initialize OpenAI client
