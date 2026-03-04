@@ -23,8 +23,16 @@ function formatTime(sec) {
 const VideoEditor = ({ file, onSave, onCancel }) => {
   const [ffmpeg] = useState(new FFmpeg());
   const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(null);
+  const [loadError, setLoadError] = useState(null); // State for assets and processing
   const [processing, setProcessing] = useState(false);
+
+  // Helper to resolve asset paths reliably in both local and deployed environments
+  const getAssetPath = (path) => {
+    // Standard public pathing. If root-relative doesn't work, try relative to window location.
+    // Most Vite deployments serve public contents at the root '/'.
+    const p = path.startsWith('/') ? path : `/${path}`;
+    return window.location.origin + p;
+  };
   const [progress, setProgress] = useState(0);
 
   // Video State
@@ -933,6 +941,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       cmd.push('-vsync', 'cfr');
       cmd.push(mainOutput);
 
+      console.log("Starting Main Video Processing...");
       console.log('Running FFmpeg (main):', cmd.join(' '));
 
       ffmpeg.on('log', ({ message }) => {
@@ -971,8 +980,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       if (returnCode !== 0) {
         throw new Error(`FFmpeg failed. The video file may be incompatible or corrupted.`);
       }
+      console.log("Main video processing complete.");
+
 
       if (hasClips) {
+        console.log("Starting Clips Processing...");
         // Same frame size as main video — clips match video basis; even dimensions for libx264
         let w = videoDimensions.width || 1280;
         let h = videoDimensions.height || 720;
@@ -1028,32 +1040,36 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           }
           if (returnCode !== 0) throw new Error(`Clip segment ${i + 1} failed.`);
         }
+        console.log("Clips processing complete.");
 
+        // Concatenate Main Video + Clips
         const listLines = ['file \'segment0.mp4\'', ...clips.map((_, i) => `file 'segment${i + 1}.mp4'`)];
         await ffmpeg.writeFile('list.txt', listLines.join('\n'));
         setProgress(85);
 
-        console.log("Concatenating segments...");
-        returnCode = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4']);
+        console.log("Starting Concatenation Process...");
+        // Re-encoding concat (via filter) is 100% reliable for production
+        // Especially with different frame rates/audio formats from user uploads
+        let concatFilter = '';
+        const concatCmd = ['-i', 'segment0.mp4'];
+        for (let i = 0; i < clips.length; i++) concatCmd.push('-i', `segment${i + 1}.mp4`);
+
+        let filterParts = '';
+        for (let i = 0; i <= clips.length; i++) filterParts += `[${i}:v][${i}:a]`;
+        filterParts += `concat=n=${clips.length + 1}:v=1:a=1[vcon][acon]`;
+
+        concatCmd.push('-filter_complex', filterParts, '-map', '[vcon]', '-map', '[acon]', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-ar', '44100', '-ac', '2', 'output.mp4');
+
+        returnCode = await ffmpeg.exec(concatCmd);
 
         if (returnCode !== 0) {
-          console.warn("Fast concat failed, attempting robust re-encoding concat...");
-          // Fallback: If copy failed, use concat filter (slower but foolproof)
-          let concatFilter = '';
-          const concatCmd = [];
-          concatCmd.push('-i', 'segment0.mp4');
-          for (let i = 0; i < clips.length; i++) concatCmd.push('-i', `segment${i + 1}.mp4`);
-
-          let filterParts = '';
-          for (let i = 0; i <= clips.length; i++) filterParts += `[${i}:v][${i}:a]`;
-          filterParts += `concat=n=${clips.length + 1}:v=1:a=1[vcon][acon]`;
-
-          concatCmd.push('-filter_complex', filterParts, '-map', '[vcon]', '-map', '[acon]', '-c:v', 'libx264', '-preset', 'ultrafast', 'output.mp4');
-          returnCode = await ffmpeg.exec(concatCmd);
+          console.warn("Filter concat failed, attempting demuxer copy...");
+          returnCode = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4']);
         }
 
-        if (returnCode !== 0) throw new Error('Concatenation of clips failed.');
-        setProgress(100);
+        if (returnCode !== 0) throw new Error('Clips ko jodne mein error aayi (Concatenation failed).');
+        console.log("Clips concatenated successfully.");
+        setProgress(90);
       }
 
       let outName = hasClips ? 'output.mp4' : mainOutput;
@@ -1077,7 +1093,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         setProgress(90);
         try {
           // Add Pune Lok frame overlay - use standard root path
-          const framePath = '/images/rell.png';
+          const framePath = getAssetPath('/images/rell.png');
           const frameFile = await fetchFile(framePath);
           await ffmpeg.writeFile('rell.png', frameFile);
 
@@ -1134,7 +1150,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       } else if (useDoubleFrame) {
         setProgress(90);
         try {
-          const frame2Path = '/images/frame2.png';
+          const frame2Path = getAssetPath('/images/frame2.png');
           const frame2File = await fetchFile(frame2Path);
           await ffmpeg.writeFile('frame2.png', frame2File);
 
@@ -1280,11 +1296,18 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       // Finalizing export... Add Outro (outerframe.mp4)
       setProgress(98);
       try {
-        const outroPath = '/images/outerframe.mp4';
-        console.log(`Fetching Outro from: ${outroPath}`);
-        const outroFile = await fetchFile(outroPath);
+        console.log("Starting Outro Processing...");
+        const outroRelativePath = '/images/outerframe.mp4';
+        const outroFullUrl = getAssetPath(outroRelativePath);
+        console.log(`Loading Outro from: ${outroFullUrl}`);
+
+        const outroFile = await fetchFile(outroFullUrl);
         await ffmpeg.writeFile('outro_raw.mp4', outroFile);
 
+        // Normalize constants
+        const OUTRO_W = 1280, OUTRO_H = 720; // Will be scaled below
+
+        // ... Outro normalization and concat ...
         // 2. Determine final dimensions
         let finalW = 1280;
         let finalH = 720;
@@ -1299,8 +1322,6 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           if (finalH % 2 !== 0) finalH++;
         }
 
-        // 3. Normalize Outro (Dimensions, 30fps, Audio)
-        // We ensure it has matching video and audio streams for concat
         const outroScale = `scale=${finalW}:${finalH}:force_original_aspect_ratio=decrease,pad=${finalW}:${finalH}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30`;
 
         await ffmpeg.exec([
@@ -1313,28 +1334,20 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           'outro_norm.mp4'
         ]);
 
-        // 4. Concat Main Video + Outro
-        // Note: We use -c copy for speed, which requires perfectly matching streams.
-        // If the main video has no audio, we might need to handle that, 
-        // but normalize-outro with silent audio should generally work or we can fallback.
-        await ffmpeg.writeFile('concat_outro.txt', `file '${finalOutName}'\nfile 'outro_norm.mp4'`);
-        const concatRet = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'concat_outro.txt', '-c', 'copy', 'final_with_outro.mp4']);
+        // Concat with re-encoding for final result sync
+        console.log("Final Concat with Outro...");
+        await ffmpeg.exec([
+          '-i', finalOutName, '-i', 'outro_norm.mp4',
+          '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[vv][aa]',
+          '-map', '[vv]', '-map', '[aa]',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-r', '30',
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+          'final_with_outro.mp4'
+        ]);
 
-        if (concatRet === 0) {
-          finalOutName = 'final_with_outro.mp4';
-          console.log("Outro added successfully.");
-        } else {
-          console.warn("Concat with copy failed, trying with re-encoding audio...");
-          // Fallback if audio streams don't match perfectly
-          await ffmpeg.exec([
-            '-i', finalOutName, '-i', 'outro_norm.mp4',
-            '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[vv][aa]',
-            '-map', '[vv]', '-map', '[aa]',
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-            'final_with_outro_reencoded.mp4'
-          ]);
-          finalOutName = 'final_with_outro_reencoded.mp4';
-        }
+        finalOutName = 'final_with_outro.mp4';
+        console.log("Outro addition complete.");
+
       } catch (outroErr) {
         console.error("Outro Process Error:", outroErr);
         // Important: If it's a fetch error, let the user know
