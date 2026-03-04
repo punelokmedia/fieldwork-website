@@ -80,8 +80,8 @@ router.post('/', auth, upload.array('media'), async (req, res) => {
     const report = await newReport.save();
     res.json(report);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error("POST /api/reports Error:", err.message, err.stack);
+    res.status(500).json({ msg: 'Server Error', details: err.message, stack: err.stack });
   }
 });
 

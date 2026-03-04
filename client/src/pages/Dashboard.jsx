@@ -577,8 +577,11 @@ const Dashboard = () => {
         fetchReports();
       }, 500);
     } catch (err) {
-      console.error(err);
-      alert('Error saving report: ' + (err.response?.data?.msg || err.message));
+      console.error("Dashboard Submit Error Details:", err.response?.data || err);
+      let errMsg = err.response?.data?.error?.message || err.response?.data?.msg || err.response?.data?.details || err.message;
+      if (typeof err.response?.data === 'string') errMsg += ` | ${err.response.data}`;
+      else if (err.response?.data) errMsg += ` | ${JSON.stringify(err.response.data)}`;
+      alert('Error saving report: ' + errMsg);
       setIsUploading(false);
     }
   };
