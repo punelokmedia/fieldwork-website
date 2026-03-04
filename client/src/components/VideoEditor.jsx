@@ -862,34 +862,39 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         lastVideoStream = 'v_text';
       }
 
-      // 4. Audio Mixing
+      // 4. Audio Mixing - Normalized to 44.1kHz Stereo for perfect concatenation
       let audioStreams = [];
       if (!useDoubleFrame) {
-        filterComplex.push(`[0:a]volume=${video1Volume}[a1]`);
-        audioStreams.push('[a1]');
+        // We MUST have an audio stream for concat later.
+        // We use a complex filter to normalize existing audio or mix with silence.
+        filterComplex.push(`aevalsrc=0:d=0.1:s=44100[asilence_base]`); // Tiny silent base
+
+        // Try to get audio from source
+        filterComplex.push(`[0:a]aresample=44100,aformat=channel_layouts=stereo,volume=${video1Volume}[a0_norm]`);
+        audioStreams.push('[a0_norm]');
 
         if (video2Written && video2Idx !== -1) {
-          filterComplex.push(`[${video2Idx}:a]volume=${video2Volume}[a2]`);
-          audioStreams.push('[a2]');
+          filterComplex.push(`[${video2Idx}:a]aresample=44100,aformat=channel_layouts=stereo,volume=${video2Volume}[a2_norm]`);
+          audioStreams.push('[a2_norm]');
         }
 
         if (audioWritten && audioIdx !== -1) {
-          filterComplex.push(`[${audioIdx}:a]volume=${audioVolume}[amusic]`);
+          filterComplex.push(`[${audioIdx}:a]aresample=44100,aformat=channel_layouts=stereo,volume=${audioVolume}[amusic]`);
           audioStreams.push('[amusic]');
         }
       }
 
-
       if (audioStreams.length > 0) {
-        if (audioStreams.length > 1) {
-          filterComplex.push(`${audioStreams.join('')}amix=inputs=${audioStreams.length}:duration=first[aout]`);
-          cmd.push('-map', '[aout]');
-        } else {
-          // Map the single filtered audio stream (e.g. [a1])
-          cmd.push('-map', audioStreams[0]);
-        }
+        // Mix all present streams. amix will handle missing streams if we use the retry logic below
+        filterComplex.push(`${audioStreams.join('')}amix=inputs=${audioStreams.length}:duration=first:dropout_transition=0[aout]`);
+        cmd.push('-map', '[aout]');
+        cmd.push('-c:a', 'aac', '-ar', '44100', '-ac', '2');
       } else {
-        cmd.push('-map', '0:a?');
+        // NO audio streams at all (e.g. useDoubleFrame or silent source)
+        // Force a silent track that matches clips/outro
+        cmd.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo');
+        // Map the silent input's audio (which will be at index 1 or more)
+        cmd.push('-map', `${nextInputIdx}:a`, '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-shortest');
       }
 
       filterComplex.push(`[${lastVideoStream}]format=yuv420p[v_final]`);
@@ -904,12 +909,26 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       }
 
       // Encoding: when we have clips, output main as segment0 then concat; else single output
-      // Use fixed 30fps so clips match main video frame base — smooth concat, no delay
       const MAIN_FPS = 30;
       const hasClips = clips.length > 0;
       const mainOutput = hasClips ? 'segment0.mp4' : 'output.mp4';
+
+      // Strict Normalization for Concat compatibility
+      let normW = videoDimensions.width || 1280;
+      let normH = videoDimensions.height || 720;
+      if (normW % 2 !== 0) normW += 1;
+      if (normH % 2 !== 0) normH += 1;
+
+      if (hasClips) {
+        // If we have clips, we must ensure segment0 matches them perfectly
+        filterComplex.push(`[${lastVideoStream}]scale=${normW}:${normH}:force_original_aspect_ratio=decrease,pad=${normW}:${normH}:(ow-iw)/2:(oh-ih)/2,setsar=1[v_norm]`);
+        lastVideoStream = 'v_norm';
+      }
+
       cmd.push('-c:v', 'libx264');
       cmd.push('-preset', 'ultrafast');
+      cmd.push('-crf', '23'); // Better quality for main part
+      cmd.push('-pix_fmt', 'yuv420p');
       cmd.push('-r', String(MAIN_FPS));
       cmd.push('-vsync', 'cfr');
       cmd.push(mainOutput);
@@ -927,8 +946,30 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       });
 
       let returnCode = await ffmpeg.exec(cmd);
+
+      // RETRY if it failed (likely due to missing audio stream [0:a] in filter complex)
       if (returnCode !== 0) {
-        throw new Error(`FFmpeg exited with code ${returnCode}. Check console for details.`);
+        console.warn("Main export failed, retrying with forced silence track...");
+        // Rebuild command without source audio filters
+        const retryCmd = [];
+        if (applyTrim && trimStart > 0) retryCmd.push('-ss', trimStart.toString());
+        if (applyTrim && trimEnd > 0 && trimEnd > trimStart) retryCmd.push('-to', trimEnd.toString());
+        retryCmd.push('-i', videoInputFile);
+        retryCmd.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo');
+
+        // Strip audio parts from filterComplex
+        const cleanFilters = filterComplex.filter(f => !f.includes('aresample') && !f.includes('amix') && !f.includes('aevalsrc'));
+
+        retryCmd.push('-filter_complex', cleanFilters.join(';'));
+        retryCmd.push('-map', `[${lastVideoStream}]`, '-map', '1:a', '-shortest');
+        retryCmd.push('-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p', '-r', '30');
+        retryCmd.push('-c:a', 'aac', '-ar', '44100', '-ac', '2', mainOutput);
+
+        returnCode = await ffmpeg.exec(retryCmd);
+      }
+
+      if (returnCode !== 0) {
+        throw new Error(`FFmpeg failed. The video file may be incompatible or corrupted.`);
       }
 
       if (hasClips) {
@@ -961,6 +1002,21 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
               segName
             ]);
           } else {
+            // Video clip: Try to keep audio, but provide silent fallback if input has no audio
+            // We use amix with silence to ensure all segments have a 44100Hz stereo stream for concat
+            returnCode = await ffmpeg.exec([
+              '-i', clipName,
+              '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+              '-filter_complex', `[0:v]${scaleFps}[v];[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+              '-map', '[v]', '-map', '[aout]',
+              '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+              '-r', String(MAIN_FPS_CLIP), '-vsync', 'cfr',
+              segName
+            ]);
+          }
+          if (returnCode !== 0) {
+            console.warn(`Clip segment ${i + 1} with audio failed, retrying with forced silence...`);
+            // Fallback: If amix failed (likely no audio in input 0), use pure silence
             returnCode = await ffmpeg.exec([
               '-i', clipName,
               '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
@@ -976,8 +1032,27 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         const listLines = ['file \'segment0.mp4\'', ...clips.map((_, i) => `file 'segment${i + 1}.mp4'`)];
         await ffmpeg.writeFile('list.txt', listLines.join('\n'));
         setProgress(85);
-        returnCode = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-fflags', '+genpts', '-c', 'copy', 'output.mp4']);
-        if (returnCode !== 0) throw new Error('Concat failed.');
+
+        console.log("Concatenating segments...");
+        returnCode = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4']);
+
+        if (returnCode !== 0) {
+          console.warn("Fast concat failed, attempting robust re-encoding concat...");
+          // Fallback: If copy failed, use concat filter (slower but foolproof)
+          let concatFilter = '';
+          const concatCmd = [];
+          concatCmd.push('-i', 'segment0.mp4');
+          for (let i = 0; i < clips.length; i++) concatCmd.push('-i', `segment${i + 1}.mp4`);
+
+          let filterParts = '';
+          for (let i = 0; i <= clips.length; i++) filterParts += `[${i}:v][${i}:a]`;
+          filterParts += `concat=n=${clips.length + 1}:v=1:a=1[vcon][acon]`;
+
+          concatCmd.push('-filter_complex', filterParts, '-map', '[vcon]', '-map', '[acon]', '-c:v', 'libx264', '-preset', 'ultrafast', 'output.mp4');
+          returnCode = await ffmpeg.exec(concatCmd);
+        }
+
+        if (returnCode !== 0) throw new Error('Concatenation of clips failed.');
         setProgress(100);
       }
 
@@ -1046,8 +1121,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           );
 
           returnCode = await ffmpeg.exec(cmdFrame);
-          if (returnCode !== 0) throw new Error('Frame overlay failed.');
-          finalOutName = 'export_framed.mp4';
+          if (returnCode !== 0) {
+            console.warn("Frame overlay failed, attempting without framing...");
+          } else {
+            finalOutName = 'export_framed.mp4';
+          }
         } catch (overlayErr) {
           console.error("Frame overlay error:", overlayErr);
         }
@@ -1195,7 +1273,68 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         }
       }
 
-      // Finalizing export...
+      // Finalizing export... Add Outro (outerframe.mp4)
+      setProgress(98);
+      try {
+        console.log("Processing Outro: outerframe.mp4");
+        // 1. Fetch and write outro
+        const outroFile = await fetchFile('/images/outerframe.mp4');
+        await ffmpeg.writeFile('outro_raw.mp4', outroFile);
+
+        // 2. Determine final dimensions
+        let finalW = 1280;
+        let finalH = 720;
+        if (useReelFrame || useDoubleFrame || exportFormat === 'reel') {
+          finalW = 1080; finalH = 1920;
+        } else if (exportFormat === 'youtube') {
+          finalW = 1920; finalH = 1080;
+        } else {
+          finalW = videoDimensions.width || 1280;
+          finalH = videoDimensions.height || 720;
+          if (finalW % 2 !== 0) finalW++;
+          if (finalH % 2 !== 0) finalH++;
+        }
+
+        // 3. Normalize Outro (Dimensions, 30fps, Audio)
+        // We ensure it has matching video and audio streams for concat
+        const outroScale = `scale=${finalW}:${finalH}:force_original_aspect_ratio=decrease,pad=${finalW}:${finalH}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30`;
+
+        await ffmpeg.exec([
+          '-i', 'outro_raw.mp4',
+          '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+          '-filter_complex', `[0:v]${outroScale}[v];[0:a][1:a]amix=inputs=2:duration=first[aout]`,
+          '-map', '[v]', '-map', '[aout]',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-r', '30',
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+          'outro_norm.mp4'
+        ]);
+
+        // 4. Concat Main Video + Outro
+        // Note: We use -c copy for speed, which requires perfectly matching streams.
+        // If the main video has no audio, we might need to handle that, 
+        // but normalize-outro with silent audio should generally work or we can fallback.
+        await ffmpeg.writeFile('concat_outro.txt', `file '${finalOutName}'\nfile 'outro_norm.mp4'`);
+        const concatRet = await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'concat_outro.txt', '-c', 'copy', 'final_with_outro.mp4']);
+
+        if (concatRet === 0) {
+          finalOutName = 'final_with_outro.mp4';
+          console.log("Outro added successfully.");
+        } else {
+          console.warn("Concat with copy failed, trying with re-encoding audio...");
+          // Fallback if audio streams don't match perfectly
+          await ffmpeg.exec([
+            '-i', finalOutName, '-i', 'outro_norm.mp4',
+            '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[vv][aa]',
+            '-map', '[vv]', '-map', '[aa]',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+            'final_with_outro_reencoded.mp4'
+          ]);
+          finalOutName = 'final_with_outro_reencoded.mp4';
+        }
+      } catch (outroErr) {
+        console.error("Failed to add outro (outerframe.mp4):", outroErr);
+      }
+
       setProgress(100);
 
 
@@ -1461,6 +1600,14 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
     <div className="flex flex-col md:flex-row h-full w-full bg-gray-900 text-white min-h-0 font-sans">
       {/* Hidden Global Inputs for Labels - MUST BE OUTSIDE CONDITIONAL BLOCKS */}
+      <input
+        type="file"
+        accept="video/*,image/*"
+        multiple
+        onChange={addClips}
+        className="hidden"
+        id="clips-upload-global"
+      />
       <input
         type="file"
         accept="audio/*"
@@ -1801,13 +1948,22 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
             )}
 
             {/* Play Controls - Overlay on mobile, below on desktop */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/40 backdrop-blur-sm px-4 py-1.5 rounded-full z-30 md:relative md:bottom-auto md:left-auto md:translate-x-0 md:bg-transparent md:mt-4">
-              <button onClick={() => setIsPlaying(!isPlaying)} className="p-1.5 bg-red-600 rounded-full hover:bg-red-700 transition">
-                {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-              </button>
-              <div className="text-[10px] sm:text-sm font-mono self-center">
-                {played.toFixed(1)}s / {duration.toFixed(1)}s
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 z-30 md:relative md:bottom-auto md:left-auto md:translate-x-0 md:mt-4 w-full">
+              <div className="flex items-center gap-3 bg-black/40 backdrop-blur-sm px-4 py-1.5 rounded-full">
+                <button onClick={() => setIsPlaying(!isPlaying)} className="p-1.5 bg-red-600 rounded-full hover:bg-red-700 transition">
+                  {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                </button>
+                <div className="text-[10px] sm:text-sm font-mono self-center">
+                  {played.toFixed(1)}s / {duration.toFixed(1)}s
+                </div>
               </div>
+
+              {/* Sequence Indicator */}
+              {(clips.length > 0 || useReelFrame || useDoubleFrame) && (
+                <div className="bg-blue-600/20 border border-blue-500/30 px-3 py-1 rounded-md text-[9px] uppercase font-bold tracking-widest text-blue-300 animate-pulse">
+                  Main Video + {clips.length} Clips + Outro (Processing Sequence)
+                </div>
+              )}
             </div>
           </>
         )}
@@ -2006,6 +2162,21 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
                   </div>
                   <div className="p-4 bg-gray-700/50 rounded-lg border border-gray-600 text-center">
                     <p className="text-sm text-gray-300">Keep: <span className="font-bold text-white">{formatTime(editingVideo === 'v1' ? trimStart : v2TrimStart)} – {formatTime(editingVideo === 'v1' ? trimEnd : v2TrimEnd)}</span> ({((editingVideo === 'v1' ? trimEnd : v2TrimEnd) - (editingVideo === 'v1' ? trimStart : v2TrimStart)).toFixed(1)}s)</p>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-700">
+                    <button
+                      onClick={() => {
+                        // Directly trigger the global input which is ALWAYS rendered
+                        const input = document.getElementById('clips-upload-global');
+                        if (input) input.click();
+                        else alert("Input not found - please try again.");
+                      }}
+                      className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl text-white text-xs font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Film size={14} /> Add Additional Clips / Images
+                    </button>
+                    <p className="text-[10px] text-gray-400 mt-2 text-center italic font-medium">✨ Is video ke baad aur videos ya photos jodne ke liye yahan click karein.</p>
                   </div>
 
                 </>
@@ -2323,17 +2494,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-gray-400 uppercase">Add Clips (Video or Image)</label>
                 <p className="text-[11px] text-gray-500">Add video clips or images to your project. You can add multiple files.</p>
-                <input
-                  ref={clipsInputRef}
-                  type="file"
-                  accept="video/*,image/*"
-                  multiple
-                  onChange={addClips}
-                  className="hidden"
-                  id="clips-upload"
-                />
                 <label
-                  htmlFor="clips-upload"
+                  htmlFor="clips-upload-global"
                   className="flex py-6 border-2 border-dashed border-gray-600 rounded-xl flex-col items-center justify-center gap-2 cursor-pointer hover:border-red-500 hover:text-red-400 transition-colors bg-gray-700/30"
                 >
                   <ImagePlus size={28} className="text-gray-400" />
