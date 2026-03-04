@@ -460,6 +460,7 @@ const Dashboard = () => {
       if (location) {
         formData.append('latitude', location.latitude);
         formData.append('longitude', location.longitude);
+        formData.append('address', location.address || '');
       }
 
       // ---------------------------------------------------------
@@ -500,7 +501,9 @@ const Dashboard = () => {
             data.append("folder", "field_reports");
             data.append("resource_type", "auto"); // Matching signed parameter
 
-            const cloudinaryRes = await axios.post(
+            // Create a clean axios instance to avoid global interceptors for external uploads
+            const cloudinaryAxios = axios.create();
+            const cloudinaryRes = await cloudinaryAxios.post(
               `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
               data,
               {
