@@ -1347,25 +1347,41 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           'outro_norm.mp4'
         ]);
 
-        // Concat with re-encoding for final result sync
-        console.log("Final Concat with Outro...");
-        await ffmpeg.exec([
-          '-i', finalOutName, '-i', 'outro_norm.mp4',
-          '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[vv][aa]',
-          '-map', '[vv]', '-map', '[aa]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p', '-r', '30',
-          '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+        // Concat using Demuxer (Stream Copy) to save Memory and avoid WASM Aborted() Crash
+        await ffmpeg.writeFile('list_outro.txt', `file '${finalOutName}'\nfile 'outro_norm.mp4'`);
+        console.log("Final Concat with Outro (Stream Copy)...");
+
+        let outroConcatCode = await ffmpeg.exec([
+          '-f', 'concat', '-safe', '0', '-i', 'list_outro.txt',
+          '-c', 'copy',
           'final_with_outro.mp4'
         ]);
 
-        finalOutName = 'final_with_outro.mp4';
-        console.log("Outro addition complete.");
+        if (outroConcatCode !== 0) {
+          console.warn("Outro copy failed. Re-encoding as fallback...");
+          outroConcatCode = await ffmpeg.exec([
+            '-i', finalOutName, '-i', 'outro_norm.mp4',
+            '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[vv][aa]',
+            '-map', '[vv]', '-map', '[aa]',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', '-pix_fmt', 'yuv420p', '-r', '30',
+            '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+            'final_with_outro.mp4'
+          ]);
+        }
+
+        if (outroConcatCode === 0) {
+          finalOutName = 'final_with_outro.mp4';
+          console.log("Outro addition complete.");
+        } else {
+          console.warn("Outro addition completely failed. Outputting without outro.");
+        }
 
         // FINAL CLEANUP
         try {
           await ffmpeg.deleteFile('outro_raw.mp4');
           await ffmpeg.deleteFile('outro_norm.mp4');
-          if (hasClips) await ffmpeg.deleteFile('output.mp4');
+          await ffmpeg.deleteFile('list_outro.txt');
+          if (finalOutName !== 'output.mp4') await ffmpeg.deleteFile('output.mp4');
           console.log("Memory Cleaned: Finalizing result.");
         } catch (fCleanupErr) {
           console.warn("Final cleanup warning:", fCleanupErr);
