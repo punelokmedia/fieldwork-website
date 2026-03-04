@@ -1076,9 +1076,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       if (useReelFrame) {
         setProgress(90);
         try {
-          // Add Pune Lok frame overlay - use relative path for production robustness
-          const framePath = './images/rell.png';
-          console.log(`Fetching frame: ${framePath}`);
+          // Add Pune Lok frame overlay - use standard root path
+          const framePath = '/images/rell.png';
           const frameFile = await fetchFile(framePath);
           await ffmpeg.writeFile('rell.png', frameFile);
 
@@ -1135,8 +1134,7 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       } else if (useDoubleFrame) {
         setProgress(90);
         try {
-          const frame2Path = './images/frame2.png';
-          console.log(`Fetching frame: ${frame2Path}`);
+          const frame2Path = '/images/frame2.png';
           const frame2File = await fetchFile(frame2Path);
           await ffmpeg.writeFile('frame2.png', frame2File);
 
@@ -1282,9 +1280,8 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       // Finalizing export... Add Outro (outerframe.mp4)
       setProgress(98);
       try {
-        const outroPath = './images/outerframe.mp4';
-        console.log(`Processing Outro: ${outroPath}`);
-        // 1. Fetch and write outro - using relative path
+        const outroPath = '/images/outerframe.mp4';
+        console.log(`Fetching Outro from: ${outroPath}`);
         const outroFile = await fetchFile(outroPath);
         await ffmpeg.writeFile('outro_raw.mp4', outroFile);
 
@@ -1339,7 +1336,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
           finalOutName = 'final_with_outro_reencoded.mp4';
         }
       } catch (outroErr) {
-        console.error("Failed to add outro (outerframe.mp4):", outroErr);
+        console.error("Outro Process Error:", outroErr);
+        // Important: If it's a fetch error, let the user know
+        if (outroErr.message?.includes('fetch')) {
+          alert("Outerframe file download nahi ho saki. Please check internet or deployment.");
+        }
       }
 
       setProgress(100);
@@ -1425,31 +1426,30 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       const file = chosen[i];
       let type = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null;
 
-      // Fallback for missing/generic MIME types
+      // Fallback for missing/generic MIME types (common in some browsers/deployments)
       if (!type) {
         const name = file.name.toLowerCase();
-        if (/\.(mp4|webm|mov|m4v|avi)$/i.test(name)) type = 'video';
+        if (/\.(mp4|webm|mov|m4v|avi|3gp|mkv)$/i.test(name)) type = 'video';
         else if (/\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name)) type = 'image';
       }
 
       if (!type) {
-        console.warn(`File type not recognized for: ${file.name}`);
+        console.warn(`Skipping unrecognized file: ${file.name} (${file.type})`);
         continue;
       }
 
       try {
         const previewUrl = URL.createObjectURL(file);
-        newClips.push({ id: `${Date.now()}-${i}-${file.name}`, file, type, previewUrl });
+        newClips.push({ id: `clip-${Date.now()}-${i}`, file, type, previewUrl });
       } catch (err) {
-        console.error("Error creating preview URL:", err);
+        console.error("Preview creation failed:", err);
       }
     }
 
     if (newClips.length > 0) {
       setClips(prev => [...prev, ...newClips]);
-      console.log(`${newClips.length} clips successfully added.`);
-    } else {
-      alert("Koi valid video ya image file nahi mili.");
+    } else if (chosen.length > 0) {
+      alert("Selected files recognized nahi hue. Please MP4/JPG files use karein.");
     }
     e.target.value = '';
   };
