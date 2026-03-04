@@ -1070,6 +1070,19 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
         if (returnCode !== 0) throw new Error('Clips ko jodne mein error aayi (Concatenation failed).');
         console.log("Clips concatenated successfully.");
         setProgress(90);
+
+        // CLEANUP intermediate segments to free memory
+        try {
+          await ffmpeg.deleteFile('segment0.mp4');
+          for (let i = 0; i < clips.length; i++) {
+            await ffmpeg.deleteFile(`segment${i + 1}.mp4`);
+            await ffmpeg.deleteFile(`clip_${i}.${clips[i].type === 'video' ? 'mp4' : 'jpg'}`);
+          }
+          await ffmpeg.deleteFile('list.txt');
+          console.log("Memory Cleaned: Intermediate segments deleted.");
+        } catch (cleanupErr) {
+          console.warn("Cleanup warning:", cleanupErr);
+        }
       }
 
       let outName = hasClips ? 'output.mp4' : mainOutput;
@@ -1347,6 +1360,16 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
 
         finalOutName = 'final_with_outro.mp4';
         console.log("Outro addition complete.");
+
+        // FINAL CLEANUP
+        try {
+          await ffmpeg.deleteFile('outro_raw.mp4');
+          await ffmpeg.deleteFile('outro_norm.mp4');
+          if (hasClips) await ffmpeg.deleteFile('output.mp4');
+          console.log("Memory Cleaned: Finalizing result.");
+        } catch (fCleanupErr) {
+          console.warn("Final cleanup warning:", fCleanupErr);
+        }
 
       } catch (outroErr) {
         console.error("Outro Process Error:", outroErr);

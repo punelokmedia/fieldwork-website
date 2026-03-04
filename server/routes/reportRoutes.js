@@ -16,7 +16,8 @@ router.get('/upload-signature', auth, (req, res) => {
     const timestamp = Math.round((new Date).getTime() / 1000);
     const signature = cloudinary.utils.api_sign_request({
       timestamp: timestamp,
-      folder: 'field_reports'
+      folder: 'field_reports',
+      resource_type: 'auto'
     }, process.env.CLOUDINARY_API_SECRET);
     
     res.json({
@@ -67,9 +68,9 @@ router.post('/', auth, upload.array('media'), async (req, res) => {
       title,
       description,
       location: {
-        latitude,
-        longitude,
-        address
+        latitude: latitude ? Number(latitude) : undefined,
+        longitude: longitude ? Number(longitude) : undefined,
+        address: address || "Unknown Location"
       },
       media, 
       keywords: seoKeywords,

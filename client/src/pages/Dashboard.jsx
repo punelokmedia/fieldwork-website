@@ -497,7 +497,8 @@ const Dashboard = () => {
             data.append("api_key", apiKey);
             data.append("timestamp", timestamp);
             data.append("signature", signature);
-            data.append("folder", "field_reports"); // Must match server folder
+            data.append("folder", "field_reports");
+            data.append("resource_type", "auto"); // Matching signed parameter
 
             const cloudinaryRes = await axios.post(
               `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
