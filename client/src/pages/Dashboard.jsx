@@ -494,12 +494,11 @@ const Dashboard = () => {
             }
 
             const data = new FormData();
-            data.append("file", fileToUpload);
             data.append("api_key", apiKey);
             data.append("timestamp", timestamp);
             data.append("signature", signature);
             data.append("folder", "field_reports");
-            data.append("resource_type", "auto"); // Matching signed parameter
+            data.append("file", fileToUpload); // IMPORTANT: file MUST be the LAST parameter
 
             // Create a clean axios instance to avoid global interceptors for external uploads
             const cloudinaryAxios = axios.create();
