@@ -44,6 +44,8 @@ const AIPosterGenerator = () => {
           { prompt },
           { headers: { 'x-auth-token': token } }
         );
+
+        
         finalPrompt = enhanceRes.data.enhancedPrompt;
       } catch (err) {
         console.warn('Neural Enhancement bypassed');
