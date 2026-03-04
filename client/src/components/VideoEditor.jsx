@@ -1076,8 +1076,11 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       if (useReelFrame) {
         setProgress(90);
         try {
-          // Add Pune Lok frame overlay
-          await ffmpeg.writeFile('rell.png', await fetchFile('/images/rell.png'));
+          // Add Pune Lok frame overlay - use relative path for production robustness
+          const framePath = './images/rell.png';
+          console.log(`Fetching frame: ${framePath}`);
+          const frameFile = await fetchFile(framePath);
+          await ffmpeg.writeFile('rell.png', frameFile);
 
           let cmdFrame = ['-i', outName, '-i', 'rell.png'];
           let frameFilter = '';
@@ -1132,7 +1135,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       } else if (useDoubleFrame) {
         setProgress(90);
         try {
-          await ffmpeg.writeFile('frame2.png', await fetchFile('/images/frame2.png'));
+          const frame2Path = './images/frame2.png';
+          console.log(`Fetching frame: ${frame2Path}`);
+          const frame2File = await fetchFile(frame2Path);
+          await ffmpeg.writeFile('frame2.png', frame2File);
 
           // Frame as base, two video instances as overlays
           // Frame 2 Final Precise Coordinates
@@ -1276,9 +1282,10 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
       // Finalizing export... Add Outro (outerframe.mp4)
       setProgress(98);
       try {
-        console.log("Processing Outro: outerframe.mp4");
-        // 1. Fetch and write outro
-        const outroFile = await fetchFile('/images/outerframe.mp4');
+        const outroPath = './images/outerframe.mp4';
+        console.log(`Processing Outro: ${outroPath}`);
+        // 1. Fetch and write outro - using relative path
+        const outroFile = await fetchFile(outroPath);
         await ffmpeg.writeFile('outro_raw.mp4', outroFile);
 
         // 2. Determine final dimensions
@@ -1412,15 +1419,38 @@ const VideoEditor = ({ file, onSave, onCancel }) => {
   const addClips = (e) => {
     const chosen = e.target.files;
     if (!chosen?.length) return;
+    console.log(`Adding ${chosen.length} files...`);
     const newClips = [];
     for (let i = 0; i < chosen.length; i++) {
       const file = chosen[i];
-      const type = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null;
-      if (!type) continue;
-      const previewUrl = URL.createObjectURL(file);
-      newClips.push({ id: `${Date.now()}-${i}-${file.name}`, file, type, previewUrl });
+      let type = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null;
+
+      // Fallback for missing/generic MIME types
+      if (!type) {
+        const name = file.name.toLowerCase();
+        if (/\.(mp4|webm|mov|m4v|avi)$/i.test(name)) type = 'video';
+        else if (/\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name)) type = 'image';
+      }
+
+      if (!type) {
+        console.warn(`File type not recognized for: ${file.name}`);
+        continue;
+      }
+
+      try {
+        const previewUrl = URL.createObjectURL(file);
+        newClips.push({ id: `${Date.now()}-${i}-${file.name}`, file, type, previewUrl });
+      } catch (err) {
+        console.error("Error creating preview URL:", err);
+      }
     }
-    setClips(prev => [...prev, ...newClips]);
+
+    if (newClips.length > 0) {
+      setClips(prev => [...prev, ...newClips]);
+      console.log(`${newClips.length} clips successfully added.`);
+    } else {
+      alert("Koi valid video ya image file nahi mili.");
+    }
     e.target.value = '';
   };
 
