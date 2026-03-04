@@ -14,9 +14,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Set up axios interceptor for API requests only
     const interceptor = axios.interceptors.request.use(config => {
-      // Only add token if it's our API and we have a token
-      const isApiRequest = config.url.includes(API_URL) || !config.url.startsWith('http');
-      if (token && isApiRequest) {
+      // Robust check: Is it our API? 
+      // 1. If it starts with / (relative)
+      // 2. If it includes our API_URL (absolute) and API_URL is not empty
+      const isRelative = config.url.startsWith('/');
+      const isOurApi = API_URL && config.url.includes(API_URL);
+      const isExternal = config.url.includes('cloudinary.com') || config.url.includes('pollinations.ai');
+
+      if (token && (isRelative || isOurApi) && !isExternal) {
         config.headers['x-auth-token'] = token;
       }
       return config;
