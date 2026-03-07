@@ -22,10 +22,10 @@ router.post(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, role } = req.body;
-
     try {
-      let user = await User.findOne({ email });
+      const { name, email, password, role } = req.body;
+      const normalizedEmail = email.toLowerCase().trim();
+      let user = await User.findOne({ email: normalizedEmail });
 
       if (user) {
         return res.status(400).json({ errors: [{ msg: 'User already exists' }] });
@@ -33,7 +33,7 @@ router.post(
 
       user = new User({
         name,
-        email,
+        email: normalizedEmail,
         password,
         role
       });
@@ -82,17 +82,20 @@ router.post(
     }
 
     const { email, password } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
 
     try {
-      let user = await User.findOne({ email }).lean();
+      let user = await User.findOne({ email: normalizedEmail }).lean();
 
       if (!user) {
+        console.warn(`[AUTH] Login failed: User not found for email: ${normalizedEmail}`);
         return res.status(400).json({ errors: [{ msg: 'Invalid Credentials' }] });
       }
 
       const isMatch = await bcrypt.compare(password, user.password);
 
       if (!isMatch) {
+        console.warn(`[AUTH] Login failed: Password mismatch for user: ${normalizedEmail}`);
         return res.status(400).json({ errors: [{ msg: 'Invalid Credentials' }] });
       }
 
@@ -170,8 +173,6 @@ router.post(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, role } = req.body;
-
     try {
       // Check if user is admin
       const requestUser = await User.findById(req.user.id);
@@ -182,7 +183,10 @@ router.post(
         return res.status(401).json({ msg: 'Not authorized as admin' });
       }
 
-      let user = await User.findOne({ email });
+      const { name, email, password, role } = req.body;
+      const normalizedEmail = email.toLowerCase().trim();
+
+      let user = await User.findOne({ email: normalizedEmail });
 
       if (user) {
         return res.status(400).json({ errors: [{ msg: 'User already exists' }] });
@@ -190,7 +194,7 @@ router.post(
 
       user = new User({
         name,
-        email,
+        email: normalizedEmail,
         password,
         role: role || 'field_work'
       });
@@ -272,7 +276,8 @@ router.put('/users/:id', auth, async (req, res) => {
         }
 
         const { name, email, role, password } = req.body;
-        const userFields = { name, email, role };
+        const normalizedEmail = email ? email.toLowerCase().trim() : undefined;
+        const userFields = { name, email: normalizedEmail, role };
         
         // Only hash password if provided/changed
         if (password) {
